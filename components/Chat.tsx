@@ -19,6 +19,7 @@ import {
   DEFAULT_SETTINGS,
   type ApiStatus,
   type ChatMessage,
+  type ChatMessageSource,
   type ChatSettings,
   type ChatThread,
 } from "@/lib/types";
@@ -39,6 +40,11 @@ type KeyStatusResponse = {
     message?: string;
   };
 };
+
+type ChatStreamEvent =
+  | { type: "text"; text?: string }
+  | { type: "source"; source?: ChatMessageSource }
+  | { type: "done" };
 
 export function Chat() {
   const [hydrated, setHydrated] = useState(false);
@@ -163,6 +169,31 @@ export function Chat() {
     [updateThread],
   );
 
+  const addAssistantSource = useCallback(
+    (threadId: string, messageId: string, source: ChatMessageSource) => {
+      updateThread(threadId, (thread) => ({
+        ...thread,
+        messages: thread.messages.map((message) => {
+          if (message.id !== messageId) {
+            return message;
+          }
+
+          const currentSources = message.sources ?? [];
+          if (currentSources.some((current) => current.url === source.url)) {
+            return message;
+          }
+
+          return {
+            ...message,
+            sources: [...currentSources, source],
+          };
+        }),
+        updatedAt: new Date().toISOString(),
+      }));
+    },
+    [updateThread],
+  );
+
   const sendMessage = useCallback(
     (rawContent: string) => {
       const content = rawContent.trim();
@@ -228,6 +259,7 @@ export function Chat() {
               model: settings.model,
               systemPrompt: settings.systemPrompt,
               temperature: settings.temperature,
+              serverTools: settings.serverTools,
             }),
             signal: controller.signal,
           });
@@ -248,17 +280,31 @@ export function Chat() {
 
           const reader = response.body.getReader();
           const decoder = new TextDecoder();
+          let buffer = "";
 
           for (;;) {
             const { done, value } = await reader.read();
             if (done) {
               break;
             }
-            streamedContent += decoder.decode(value, { stream: true });
-            updateAssistantMessage(threadId, assistantMessage.id, streamedContent);
+            buffer += decoder.decode(value, { stream: true });
+            buffer = processStreamEvents(buffer, {
+              onText: (text) => {
+                streamedContent += text;
+                updateAssistantMessage(threadId, assistantMessage.id, streamedContent);
+              },
+              onSource: (source) => addAssistantSource(threadId, assistantMessage.id, source),
+            });
           }
 
-          streamedContent += decoder.decode();
+          buffer += decoder.decode();
+          processStreamEvents(`${buffer}\n`, {
+            onText: (text) => {
+              streamedContent += text;
+              updateAssistantMessage(threadId, assistantMessage.id, streamedContent);
+            },
+            onSource: (source) => addAssistantSource(threadId, assistantMessage.id, source),
+          });
           updateAssistantMessage(
             threadId,
             assistantMessage.id,
@@ -289,7 +335,7 @@ export function Chat() {
 
       return true;
     },
-    [activeThread, isStreaming, settings, updateAssistantMessage, updateThread],
+    [activeThread, addAssistantSource, isStreaming, settings, updateAssistantMessage, updateThread],
   );
 
   const stopStreaming = useCallback(() => {
@@ -522,4 +568,48 @@ async function readErrorMessage(response: Response) {
   }
 
   return response.statusText || "Request failed. Try again.";
+}
+
+function processStreamEvents(
+  buffer: string,
+  handlers: {
+    onText: (text: string) => void;
+    onSource: (source: ChatMessageSource) => void;
+  },
+) {
+  const lines = buffer.split("\n");
+  const remainder = lines.pop() ?? "";
+
+  for (const line of lines) {
+    if (!line.trim()) {
+      continue;
+    }
+
+    try {
+      const event = JSON.parse(line) as ChatStreamEvent;
+      if (event.type === "text" && typeof event.text === "string") {
+        handlers.onText(event.text);
+      }
+      if (event.type === "source" && isMessageSource(event.source)) {
+        handlers.onSource(event.source);
+      }
+    } catch {
+      handlers.onText(line);
+    }
+  }
+
+  return remainder;
+}
+
+function isMessageSource(value: unknown): value is ChatMessageSource {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const source = value as Partial<ChatMessageSource>;
+  return (
+    typeof source.id === "string" &&
+    typeof source.url === "string" &&
+    (source.title === undefined || typeof source.title === "string")
+  );
 }

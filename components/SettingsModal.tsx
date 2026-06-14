@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, KeyRound, RefreshCw, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, Globe2, KeyRound, RefreshCw, RotateCcw, Search, Trash2, X } from "lucide-react";
 import {
   DEFAULT_MODEL,
+  DEFAULT_SERVER_TOOLS,
   type ApiStatus,
   type ChatSettings,
+  type FetchEngine,
   type OpenRouterModel,
+  type SearchContextSize,
+  type SearchEngine,
 } from "@/lib/types";
 
 type SettingsModalProps = {
@@ -44,6 +48,7 @@ export function SettingsModal({
   const [models, setModels] = useState<OpenRouterModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState("");
+  const [webToolsAdvancedOpen, setWebToolsAdvancedOpen] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -117,6 +122,7 @@ export function SettingsModal({
   }, [modelQuery, open]);
 
   const savedKeyLabel = useMemo(() => maskApiKey(settings.apiKey), [settings.apiKey]);
+  const serverTools = settings.serverTools ?? DEFAULT_SERVER_TOOLS;
 
   if (!open) {
     return null;
@@ -138,6 +144,45 @@ export function SettingsModal({
       apiKey: undefined,
     });
     onValidateApiKey("");
+  }
+
+  function updateWebSearch(updates: Partial<ChatSettings["serverTools"]["webSearch"]>) {
+    onSettingsChange({
+      ...settings,
+      serverTools: {
+        ...serverTools,
+        webSearch: {
+          ...serverTools.webSearch,
+          ...updates,
+        },
+      },
+    });
+  }
+
+  function updateWebFetch(updates: Partial<ChatSettings["serverTools"]["webFetch"]>) {
+    onSettingsChange({
+      ...settings,
+      serverTools: {
+        ...serverTools,
+        webFetch: {
+          ...serverTools.webFetch,
+          ...updates,
+        },
+      },
+    });
+  }
+
+  function updateDatetime(updates: Partial<ChatSettings["serverTools"]["datetime"]>) {
+    onSettingsChange({
+      ...settings,
+      serverTools: {
+        ...serverTools,
+        datetime: {
+          ...serverTools.datetime,
+          ...updates,
+        },
+      },
+    });
   }
 
   return (
@@ -294,6 +339,155 @@ export function SettingsModal({
             </div>
           </section>
 
+          <section className="mb-5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-raised)] p-3">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Web tools</p>
+                <p className="mt-1 text-xs leading-5 text-[color:var(--muted)]">
+                  Optional OpenRouter server tools. Web search and fetch are beta and may add provider/tool costs.
+                </p>
+              </div>
+              <Globe2 size={18} className="mt-0.5 shrink-0 text-[color:var(--accent)]" aria-hidden="true" />
+            </div>
+
+            <div className="space-y-2">
+              <ToolToggle
+                title="Web Search"
+                description="Let the model search current web results when needed."
+                enabled={serverTools.webSearch.enabled}
+                onChange={(enabled) => updateWebSearch({ enabled })}
+              />
+              <ToolToggle
+                title="Web Fetch"
+                description="Let the model fetch and read URLs mentioned in chat."
+                enabled={serverTools.webFetch.enabled}
+                onChange={(enabled) => updateWebFetch({ enabled })}
+              />
+              <ToolToggle
+                title="Datetime"
+                description="Give the model current date and time. No extra tool cost."
+                enabled={serverTools.datetime.enabled}
+                onChange={(enabled) => updateDatetime({ enabled })}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setWebToolsAdvancedOpen((current) => !current)}
+              className="mt-3 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] px-3 text-left text-sm text-[color:var(--foreground)] transition active:scale-[0.99]"
+            >
+              <span>Advanced web options</span>
+              <ChevronDown
+                size={17}
+                aria-hidden="true"
+                className={`shrink-0 transition ${webToolsAdvancedOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {webToolsAdvancedOpen ? (
+              <div className="mt-3 space-y-4 border-t border-[color:var(--border)] pt-3">
+                <div>
+                  <p className="mb-2 text-sm font-medium">Web Search</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <SelectField
+                      label="Search engine"
+                      value={serverTools.webSearch.engine}
+                      onChange={(value) => updateWebSearch({ engine: value as SearchEngine })}
+                      options={["auto", "native", "exa", "firecrawl", "parallel", "perplexity"]}
+                    />
+                    <SelectField
+                      label="Context size"
+                      value={serverTools.webSearch.searchContextSize}
+                      onChange={(value) => updateWebSearch({ searchContextSize: value as SearchContextSize })}
+                      options={["auto", "low", "medium", "high"]}
+                    />
+                    <NumberField
+                      label="Max results per search"
+                      value={serverTools.webSearch.maxResults}
+                      min={1}
+                      max={25}
+                      onChange={(value) => updateWebSearch({ maxResults: value })}
+                    />
+                    <NumberField
+                      label="Total result cap"
+                      value={serverTools.webSearch.maxTotalResults}
+                      min={1}
+                      max={100}
+                      onChange={(value) => updateWebSearch({ maxTotalResults: value })}
+                    />
+                  </div>
+                  <DomainField
+                    label="Allowed search domains"
+                    value={serverTools.webSearch.allowedDomains}
+                    onChange={(domains) => updateWebSearch({ allowedDomains: domains })}
+                  />
+                  <DomainField
+                    label="Excluded search domains"
+                    value={serverTools.webSearch.excludedDomains}
+                    onChange={(domains) => updateWebSearch({ excludedDomains: domains })}
+                  />
+                  {serverTools.webSearch.allowedDomains.length > 0 && serverTools.webSearch.excludedDomains.length > 0 ? (
+                    <p className="mt-2 text-xs leading-5 text-[color:var(--muted)]">
+                      Some search engines treat allowed and excluded domains as mutually exclusive; allowed domains take precedence where required.
+                    </p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <p className="mb-2 text-sm font-medium">Web Fetch</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <SelectField
+                      label="Fetch engine"
+                      value={serverTools.webFetch.engine}
+                      onChange={(value) => updateWebFetch({ engine: value as FetchEngine })}
+                      options={["auto", "native", "exa", "openrouter", "firecrawl", "parallel"]}
+                    />
+                    <NumberField
+                      label="Max fetches"
+                      value={serverTools.webFetch.maxUses}
+                      min={1}
+                      max={50}
+                      onChange={(value) => updateWebFetch({ maxUses: value })}
+                    />
+                    <NumberField
+                      label="Max content tokens"
+                      value={serverTools.webFetch.maxContentTokens}
+                      min={1000}
+                      max={200000}
+                      onChange={(value) => updateWebFetch({ maxContentTokens: value })}
+                    />
+                  </div>
+                  <DomainField
+                    label="Allowed fetch domains"
+                    value={serverTools.webFetch.allowedDomains}
+                    onChange={(domains) => updateWebFetch({ allowedDomains: domains })}
+                  />
+                  <DomainField
+                    label="Blocked fetch domains"
+                    value={serverTools.webFetch.blockedDomains}
+                    onChange={(domains) => updateWebFetch({ blockedDomains: domains })}
+                  />
+                </div>
+
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <CalendarClock size={16} aria-hidden="true" />
+                    Datetime timezone
+                  </span>
+                  <input
+                    value={serverTools.datetime.timezone}
+                    spellCheck={false}
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    placeholder="America/New_York"
+                    onChange={(event) => updateDatetime({ timezone: event.target.value })}
+                    className="min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 text-base text-[color:var(--foreground)]"
+                  />
+                </label>
+              </div>
+            ) : null}
+          </section>
+
           <label className="mb-4 block">
             <span className="mb-2 block text-sm font-medium">System prompt</span>
             <textarea
@@ -354,6 +548,123 @@ export function SettingsModal({
   );
 }
 
+function ToolToggle({
+  title,
+  description,
+  enabled,
+  onChange,
+}: {
+  title: string;
+  description: string;
+  enabled: boolean;
+  onChange: (enabled: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!enabled)}
+      className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-left transition active:scale-[0.99]"
+    >
+      <span className="min-w-0">
+        <span className="block text-sm font-medium">{title}</span>
+        <span className="block text-xs leading-5 text-[color:var(--muted)]">{description}</span>
+      </span>
+      <span
+        className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition ${
+          enabled ? "justify-end bg-[color:var(--accent-strong)]" : "justify-start bg-[color:var(--surface-muted)]"
+        }`}
+        aria-hidden="true"
+      >
+        <span className="h-5 w-5 rounded-full bg-[color:var(--background)] shadow" />
+      </span>
+    </button>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-medium text-[color:var(--muted)]">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 text-base text-[color:var(--foreground)]"
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-medium text-[color:var(--muted)]">{label}</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(clampNumber(Number(event.target.value), min, max, value))}
+        className="min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 text-base text-[color:var(--foreground)]"
+      />
+    </label>
+  );
+}
+
+function DomainField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  return (
+    <label className="mt-3 block">
+      <span className="mb-2 block text-xs font-medium text-[color:var(--muted)]">{label}</span>
+      <textarea
+        value={value.join("\n")}
+        rows={2}
+        spellCheck={false}
+        autoCapitalize="off"
+        autoCorrect="off"
+        placeholder="example.com, docs.example.com"
+        onChange={(event) => onChange(parseDomains(event.target.value))}
+        className="min-h-20 w-full resize-y rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-base leading-6 text-[color:var(--foreground)]"
+      />
+    </label>
+  );
+}
+
 function apiStatusLabel(status: ApiStatus) {
   switch (status) {
     case "checking":
@@ -396,4 +707,23 @@ function formatPrice(price?: string) {
   }
 
   return `$${(numeric * 1_000_000).toFixed(numeric * 1_000_000 < 1 ? 2 : 1)}/M`;
+}
+
+function parseDomains(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[,\n]/)
+        .map((domain) => domain.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function clampNumber(value: number, min: number, max: number, fallback: number) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, Math.round(value)));
 }

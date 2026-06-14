@@ -23,8 +23,19 @@ Chat uses the OpenRouter API key saved in the app Settings screen. `OPENROUTER_A
 - Search current OpenRouter models from the Settings model picker. The picker is powered by `GET https://openrouter.ai/api/v1/models` through `app/api/models/route.ts`.
 - Use the selected model field for a custom model id when the search list does not show it.
 - Change the system prompt and temperature in Settings.
+- Enable OpenRouter server tools for Web Search, Web Fetch, and Datetime. These are off by default; Web Search and Web Fetch are beta OpenRouter features and may add tool/provider costs.
 - Clear chat clears only the active chat thread.
 - Reset settings restores defaults and removes the locally saved key.
+
+## Web Tools
+
+The Web tools section in Settings controls OpenRouter server tools:
+
+- Web Search sends `openrouter:web_search` for current web results.
+- Web Fetch sends `openrouter:web_fetch` so the model can read URLs mentioned in chat.
+- Datetime sends `openrouter:datetime` with the configured IANA timezone.
+
+Advanced options let you choose engines, limits, domain filters, and timezone. When OpenRouter returns URL source metadata, the app shows source chips under assistant replies.
 
 ## Chat History
 

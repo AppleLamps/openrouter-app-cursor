@@ -1,7 +1,7 @@
 "use client";
 
 import { MarkdownMessage } from "@/components/MarkdownMessage";
-import type { ChatMessage } from "@/lib/types";
+import type { ChatMessage, ChatMessageSource } from "@/lib/types";
 
 type MessageBubbleProps = {
   message: ChatMessage;
@@ -24,13 +24,47 @@ export function MessageBubble({ message, isStreaming = false }: MessageBubblePro
         {isUser ? (
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         ) : message.content ? (
-          <MarkdownMessage content={message.content} />
+          <>
+            <MarkdownMessage content={message.content} />
+            <SourceChips sources={message.sources ?? []} />
+          </>
         ) : isStreaming ? (
           <TypingIndicator />
         ) : null}
       </div>
     </article>
   );
+}
+
+function SourceChips({ sources }: { sources: ChatMessageSource[] }) {
+  if (sources.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2 border-t border-[color:var(--border)] pt-3">
+      {sources.map((source, index) => (
+        <a
+          key={`${source.url}-${source.id}`}
+          href={source.url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex min-h-8 max-w-full items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface-muted)] px-2.5 text-xs text-[color:var(--foreground)] transition active:scale-95"
+        >
+          <span className="shrink-0 text-[color:var(--accent)]">{index + 1}</span>
+          <span className="truncate">{source.title?.trim() || hostnameFromUrl(source.url)}</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function hostnameFromUrl(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
 
 function TypingIndicator() {

@@ -1,9 +1,14 @@
 import {
   DEFAULT_MODEL,
+  DEFAULT_SERVER_TOOLS,
   DEFAULT_SETTINGS,
   type ChatMessage,
   type ChatSettings,
   type ChatThread,
+  type FetchEngine,
+  type SearchContextSize,
+  type SearchEngine,
+  type ServerToolSettings,
 } from "@/lib/types";
 
 const MESSAGES_KEY = "openrouter-chat:messages:v1";
@@ -21,11 +26,13 @@ function isChatMessage(value: unknown): value is ChatMessage {
   }
 
   const message = value as Partial<ChatMessage>;
+  const sources = (message as { sources?: unknown }).sources;
   return (
     typeof message.id === "string" &&
     (message.role === "system" || message.role === "user" || message.role === "assistant") &&
     typeof message.content === "string" &&
-    (message.createdAt === undefined || typeof message.createdAt === "string")
+    (message.createdAt === undefined || typeof message.createdAt === "string") &&
+    (sources === undefined || Array.isArray(sources))
   );
 }
 
@@ -54,7 +61,104 @@ function normalizeSettings(value: unknown): ChatSettings {
         ? settings.systemPrompt
         : DEFAULT_SETTINGS.systemPrompt,
     temperature,
+    serverTools: normalizeServerTools(settings.serverTools),
   };
+}
+
+function normalizeServerTools(value: unknown): ServerToolSettings {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_SERVER_TOOLS;
+  }
+
+  const tools = value as Partial<ChatSettings["serverTools"]>;
+  const webSearch = tools.webSearch && typeof tools.webSearch === "object" ? tools.webSearch : {};
+  const webFetch = tools.webFetch && typeof tools.webFetch === "object" ? tools.webFetch : {};
+  const datetime = tools.datetime && typeof tools.datetime === "object" ? tools.datetime : {};
+
+  return {
+    webSearch: {
+      enabled: Boolean((webSearch as { enabled?: unknown }).enabled),
+      engine: normalizeSearchEngine((webSearch as { engine?: unknown }).engine),
+      maxResults: clampNumber((webSearch as { maxResults?: unknown }).maxResults, 1, 25, DEFAULT_SERVER_TOOLS.webSearch.maxResults),
+      maxTotalResults: clampNumber((webSearch as { maxTotalResults?: unknown }).maxTotalResults, 1, 100, DEFAULT_SERVER_TOOLS.webSearch.maxTotalResults),
+      searchContextSize: normalizeSearchContextSize((webSearch as { searchContextSize?: unknown }).searchContextSize),
+      allowedDomains: normalizeDomains((webSearch as { allowedDomains?: unknown }).allowedDomains),
+      excludedDomains: normalizeDomains((webSearch as { excludedDomains?: unknown }).excludedDomains),
+    },
+    webFetch: {
+      enabled: Boolean((webFetch as { enabled?: unknown }).enabled),
+      engine: normalizeFetchEngine((webFetch as { engine?: unknown }).engine),
+      maxUses: clampNumber((webFetch as { maxUses?: unknown }).maxUses, 1, 50, DEFAULT_SERVER_TOOLS.webFetch.maxUses),
+      maxContentTokens: clampNumber((webFetch as { maxContentTokens?: unknown }).maxContentTokens, 1000, 200000, DEFAULT_SERVER_TOOLS.webFetch.maxContentTokens),
+      allowedDomains: normalizeDomains((webFetch as { allowedDomains?: unknown }).allowedDomains),
+      blockedDomains: normalizeDomains((webFetch as { blockedDomains?: unknown }).blockedDomains),
+    },
+    datetime: {
+      enabled: Boolean((datetime as { enabled?: unknown }).enabled),
+      timezone:
+        typeof (datetime as { timezone?: unknown }).timezone === "string" &&
+        isValidTimezone((datetime as { timezone: string }).timezone.trim())
+          ? (datetime as { timezone: string }).timezone.trim()
+          : DEFAULT_SERVER_TOOLS.datetime.timezone,
+    },
+  };
+}
+
+function normalizeSearchEngine(value: unknown): SearchEngine {
+  return value === "native" ||
+    value === "exa" ||
+    value === "firecrawl" ||
+    value === "parallel" ||
+    value === "perplexity"
+    ? value
+    : "auto";
+}
+
+function normalizeFetchEngine(value: unknown): FetchEngine {
+  return value === "native" ||
+    value === "exa" ||
+    value === "openrouter" ||
+    value === "firecrawl" ||
+    value === "parallel"
+    ? value
+    : "auto";
+}
+
+function normalizeSearchContextSize(value: unknown): SearchContextSize {
+  return value === "low" || value === "medium" || value === "high" ? value : "auto";
+}
+
+function normalizeDomains(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .filter((domain): domain is string => typeof domain === "string")
+        .map((domain) => domain.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const numeric = typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
+function isValidTimezone(value: string) {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function createId() {
