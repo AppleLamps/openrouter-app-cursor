@@ -1,0 +1,221 @@
+import {
+  DEFAULT_MODEL,
+  DEFAULT_SETTINGS,
+  type ChatMessage,
+  type ChatSettings,
+  type ChatThread,
+} from "@/lib/types";
+
+const MESSAGES_KEY = "openrouter-chat:messages:v1";
+const SETTINGS_KEY = "openrouter-chat:settings:v1";
+const THREADS_KEY = "openrouter-chat:threads:v1";
+const ACTIVE_THREAD_KEY = "openrouter-chat:active-thread-id:v1";
+
+function canUseStorage() {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function isChatMessage(value: unknown): value is ChatMessage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const message = value as Partial<ChatMessage>;
+  return (
+    typeof message.id === "string" &&
+    (message.role === "system" || message.role === "user" || message.role === "assistant") &&
+    typeof message.content === "string" &&
+    (message.createdAt === undefined || typeof message.createdAt === "string")
+  );
+}
+
+function normalizeSettings(value: unknown): ChatSettings {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_SETTINGS;
+  }
+
+  const settings = value as Partial<ChatSettings>;
+  const temperature =
+    typeof settings.temperature === "number" && Number.isFinite(settings.temperature)
+      ? Math.min(2, Math.max(0, settings.temperature))
+      : DEFAULT_SETTINGS.temperature;
+
+  return {
+    apiKey:
+      typeof settings.apiKey === "string" && settings.apiKey.trim()
+        ? settings.apiKey.trim()
+        : undefined,
+    model:
+      typeof settings.model === "string" && settings.model.trim()
+        ? settings.model.trim()
+        : DEFAULT_MODEL,
+    systemPrompt:
+      typeof settings.systemPrompt === "string"
+        ? settings.systemPrompt
+        : DEFAULT_SETTINGS.systemPrompt,
+    temperature,
+  };
+}
+
+function createId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function titleFromMessages(messages: ChatMessage[]) {
+  const firstUserMessage = messages.find((message) => message.role === "user" && message.content.trim());
+  if (!firstUserMessage) {
+    return "New chat";
+  }
+
+  const compact = firstUserMessage.content.replace(/\s+/g, " ").trim();
+  return compact.length > 42 ? `${compact.slice(0, 39).trim()}...` : compact;
+}
+
+function isChatThread(value: unknown): value is ChatThread {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const thread = value as Partial<ChatThread>;
+  return (
+    typeof thread.id === "string" &&
+    typeof thread.title === "string" &&
+    Array.isArray(thread.messages) &&
+    thread.messages.every(isChatMessage) &&
+    typeof thread.createdAt === "string" &&
+    typeof thread.updatedAt === "string"
+  );
+}
+
+function normalizeThread(thread: ChatThread): ChatThread {
+  const messages = thread.messages.filter(isChatMessage);
+  return {
+    ...thread,
+    title: thread.title.trim() || titleFromMessages(messages),
+    messages,
+  };
+}
+
+function loadLegacyMessages(): ChatMessage[] {
+  if (!canUseStorage()) {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(MESSAGES_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(isChatMessage) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function loadThreads(): ChatThread[] {
+  if (!canUseStorage()) {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(THREADS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const threads = parsed.filter(isChatThread).map(normalizeThread);
+        if (threads.length > 0) {
+          return threads;
+        }
+      }
+    }
+  } catch {
+    // Fall through to legacy migration.
+  }
+
+  const legacyMessages = loadLegacyMessages();
+  if (legacyMessages.length === 0) {
+    return [];
+  }
+
+  const now = new Date().toISOString();
+  const migratedThread: ChatThread = {
+    id: createId(),
+    title: titleFromMessages(legacyMessages),
+    messages: legacyMessages,
+    createdAt: legacyMessages[0]?.createdAt ?? now,
+    updatedAt: now,
+  };
+
+  saveThreads([migratedThread]);
+  window.localStorage.removeItem(MESSAGES_KEY);
+  return [migratedThread];
+}
+
+export function saveThreads(threads: ChatThread[]) {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(THREADS_KEY, JSON.stringify(threads.map(normalizeThread)));
+}
+
+export function loadActiveThreadId() {
+  if (!canUseStorage()) {
+    return null;
+  }
+
+  return window.localStorage.getItem(ACTIVE_THREAD_KEY);
+}
+
+export function saveActiveThreadId(threadId: string) {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(ACTIVE_THREAD_KEY, threadId);
+}
+
+export function clearStoredThreads() {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  window.localStorage.removeItem(THREADS_KEY);
+  window.localStorage.removeItem(ACTIVE_THREAD_KEY);
+  window.localStorage.removeItem(MESSAGES_KEY);
+}
+
+export function loadSettings(): ChatSettings {
+  if (!canUseStorage()) {
+    return DEFAULT_SETTINGS;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_KEY);
+    return raw ? normalizeSettings(JSON.parse(raw)) : DEFAULT_SETTINGS;
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+export function saveSettings(settings: ChatSettings) {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(normalizeSettings(settings)));
+}
+
+export function clearStoredSettings() {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  window.localStorage.removeItem(SETTINGS_KEY);
+}
