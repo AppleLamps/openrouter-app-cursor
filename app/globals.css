@@ -90,6 +90,55 @@ select:focus-visible {
   border-radius: 999px;
 }
 
+.rich-code pre {
+  margin: 0;
+  min-width: max-content;
+  overflow-x: auto;
+  padding: 0.75rem;
+  background: transparent !important;
+  font-size: 0.84rem;
+  line-height: 1.25rem;
+}
+
+.rich-code code {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    "SF Mono",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+}
+
+.rich-render {
+  overflow-x: auto;
+  padding: 0.75rem;
+}
+
+.rich-render-mermaid {
+  display: flex;
+  justify-content: center;
+}
+
+.rich-render-mermaid svg {
+  height: auto;
+  max-width: 100%;
+  min-width: 20rem;
+}
+
+.rich-render-chart {
+  min-height: 12rem;
+}
+
+.rich-render-chart details {
+  color: var(--foreground);
+}
+
+.rich-render-chart svg {
+  height: auto;
+  max-width: none;
+}
+
 .typing-dot {
   animation: typing-bounce 1.2s infinite ease-in-out;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -46,7 +46,7 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
             </th>
           ),
           td: ({ children }) => <td className="border-b border-[color:var(--border)] px-3 py-2">{children}</td>,
-          pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+          pre: ({ children }) => <RichBlock>{children}</RichBlock>,
           code: ({ className, children }) => {
             if (className?.startsWith("language-")) {
               return <code className={className}>{children}</code>;
@@ -66,10 +66,185 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
   );
 }
 
-function CodeBlock({ children }: { children: React.ReactNode }) {
-  const [copied, setCopied] = useState(false);
+function RichBlock({ children }: { children: React.ReactNode }) {
   const code = useMemo(() => extractText(children).replace(/\n$/, ""), [children]);
-  const language = useMemo(() => extractLanguage(children), [children]);
+  const language = useMemo(() => extractLanguage(children).toLowerCase(), [children]);
+
+  if (language === "mermaid") {
+    return <MermaidBlock code={code} />;
+  }
+
+  if (language === "chart" || language === "vega-lite" || language === "vegalite") {
+    return <ChartBlock code={code} language={language === "chart" ? "chart" : "vega-lite"} />;
+  }
+
+  return <CodeBlock code={code} language={language} />;
+}
+
+function MermaidBlock({ code }: { code: string }) {
+  const rawId = useId();
+  const renderId = useMemo(() => `mermaid-${rawId.replace(/[^a-zA-Z0-9_-]/g, "")}`, [rawId]);
+  const [svg, setSvg] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function renderMermaid() {
+      setError("");
+      setSvg("");
+
+      try {
+        const mermaid = (await import("mermaid")).default;
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: "dark",
+          themeVariables: {
+            background: "#070808",
+            primaryColor: "#202428",
+            primaryTextColor: "#f6f2ea",
+            primaryBorderColor: "#77e0ba",
+            lineColor: "#aaa397",
+            secondaryColor: "#171a1d",
+            tertiaryColor: "#101214",
+          },
+        });
+        mermaid.setParseErrorHandler(() => undefined);
+        await mermaid.parse(code);
+
+        const result = await mermaid.render(renderId, code);
+        if (!cancelled) {
+          setSvg(result.svg);
+        }
+      } catch (caught) {
+        if (!cancelled) {
+          setError(formatRenderError(caught, "Unable to render Mermaid diagram."));
+        }
+      }
+    }
+
+    void renderMermaid();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [code, renderId]);
+
+  return (
+    <RenderedPanel
+      label="mermaid"
+      code={code}
+      error={error}
+      loading={!svg && !error}
+      body={
+        svg ? (
+          <div
+            className="rich-render rich-render-mermaid"
+            dangerouslySetInnerHTML={{ __html: svg }}
+          />
+        ) : null
+      }
+    />
+  );
+}
+
+function ChartBlock({ code, language }: { code: string; language: string }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let view: { finalize: () => void } | undefined;
+    let cancelled = false;
+
+    async function renderChart() {
+      setError("");
+      setLoading(true);
+
+      try {
+        const spec = parseChartSpec(code);
+        const { default: embed } = await import("vega-embed");
+
+        if (!containerRef.current || cancelled) {
+          return;
+        }
+
+        const result = await embed(containerRef.current, spec, {
+          actions: false,
+          renderer: "svg",
+          theme: "dark",
+          tooltip: true,
+        });
+
+        view = result.view;
+      } catch (caught) {
+        if (!cancelled) {
+          setError(formatRenderError(caught, "Unable to render chart."));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void renderChart();
+
+    return () => {
+      cancelled = true;
+      view?.finalize();
+    };
+  }, [code]);
+
+  return (
+    <RenderedPanel
+      label={language}
+      code={code}
+      error={error}
+      loading={loading}
+      body={<div ref={containerRef} className="rich-render rich-render-chart" />}
+    />
+  );
+}
+
+function CodeBlock({ code, language }: { code: string; language: string }) {
+  const [copied, setCopied] = useState(false);
+  const [highlightedHtml, setHighlightedHtml] = useState("");
+  const [highlightError, setHighlightError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function highlightCode() {
+      setHighlightError("");
+      setHighlightedHtml("");
+
+      try {
+        const { bundledLanguages, codeToHtml } = await import("shiki");
+        const requestedLanguage = language || "text";
+        const safeLanguage = requestedLanguage in bundledLanguages ? requestedLanguage : "text";
+        const html = await codeToHtml(code, {
+          lang: safeLanguage,
+          theme: "github-dark",
+        });
+
+        if (!cancelled) {
+          setHighlightedHtml(html);
+        }
+      } catch (caught) {
+        if (!cancelled) {
+          setHighlightError(formatRenderError(caught, "Syntax highlighting unavailable."));
+        }
+      }
+    }
+
+    void highlightCode();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [code, language]);
 
   async function copyCode() {
     try {
@@ -83,23 +258,146 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="mb-3 overflow-hidden rounded-lg border border-[color:var(--border)] bg-[#070808] last:mb-0">
-      <div className="flex min-h-10 items-center justify-between gap-3 border-b border-[color:var(--border)] px-3">
-        <span className="truncate text-xs text-[color:var(--muted)]">{language || "code"}</span>
-        <button
-          type="button"
-          title="Copy code"
-          aria-label="Copy code"
-          onClick={copyCode}
-          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-[color:var(--muted)] transition active:scale-95"
-        >
-          {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-        </button>
-      </div>
-      <pre className="scroll-area overflow-x-auto p-3 text-[0.84rem] leading-5 text-[#f7f1e8]">
-        <code>{code}</code>
-      </pre>
+      <BlockHeader label={language || "code"} copied={copied} onCopy={copyCode} />
+      {highlightError ? <RenderError message={highlightError} /> : null}
+      {highlightedHtml ? (
+        <div
+          className="rich-code scroll-area overflow-x-auto"
+          dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+        />
+      ) : (
+        <pre className="scroll-area overflow-x-auto p-3 text-[0.84rem] leading-5 text-[#f7f1e8]">
+          <code>{code}</code>
+        </pre>
+      )}
     </div>
   );
+}
+
+function RenderedPanel({
+  label,
+  code,
+  error,
+  loading,
+  body,
+}: {
+  label: string;
+  code: string;
+  error: string;
+  loading: boolean;
+  body: React.ReactNode;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="mb-3 overflow-hidden rounded-lg border border-[color:var(--border)] bg-[#070808] last:mb-0">
+      <BlockHeader label={label} copied={copied} onCopy={copyCode} />
+      {error ? <RenderError message={error} /> : null}
+      {loading ? (
+        <div className="flex min-h-28 items-center justify-center px-3 py-6 text-sm text-[color:var(--muted)]">
+          Rendering {label}...
+        </div>
+      ) : null}
+      <div className={error ? "hidden" : undefined}>{body}</div>
+      {error ? (
+        <pre className="scroll-area max-h-64 overflow-auto border-t border-[color:var(--border)] p-3 text-[0.8rem] leading-5 text-[#f7f1e8]">
+          <code>{code}</code>
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
+function BlockHeader({
+  label,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="flex min-h-10 items-center justify-between gap-3 border-b border-[color:var(--border)] px-3">
+      <span className="truncate text-xs text-[color:var(--muted)]">{label}</span>
+      <button
+        type="button"
+        title="Copy source"
+        aria-label="Copy source"
+        onClick={onCopy}
+        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-[color:var(--muted)] transition active:scale-95"
+      >
+        {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+      </button>
+    </div>
+  );
+}
+
+function RenderError({ message }: { message: string }) {
+  return (
+    <div className="border-b border-[color:var(--border)] bg-[color:var(--danger)]/10 px-3 py-2 text-xs leading-5 text-[color:var(--danger)]">
+      {message}
+    </div>
+  );
+}
+
+function parseChartSpec(code: string): Record<string, unknown> {
+  let spec: unknown;
+
+  try {
+    spec = JSON.parse(code);
+  } catch {
+    throw new Error("Chart blocks must contain valid Vega-Lite JSON.");
+  }
+
+  if (!isRecord(spec)) {
+    throw new Error("Chart blocks must contain a Vega-Lite JSON object.");
+  }
+
+  if (hasExternalDataUrl(spec)) {
+    throw new Error("External chart data URLs are blocked. Use inline data.values instead.");
+  }
+
+  return spec;
+}
+
+function hasExternalDataUrl(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(hasExternalDataUrl);
+  }
+
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const data = value.data;
+  if (isRecord(data) && typeof data.url === "string") {
+    return true;
+  }
+
+  return Object.values(value).some(hasExternalDataUrl);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function formatRenderError(caught: unknown, fallback: string): string {
+  if (caught instanceof Error && caught.message) {
+    return caught.message;
+  }
+
+  return fallback;
 }
 
 function extractText(node: React.ReactNode): string {
