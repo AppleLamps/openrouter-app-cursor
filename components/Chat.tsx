@@ -18,6 +18,8 @@ import {
 import {
   DEFAULT_SETTINGS,
   type ApiStatus,
+  type ChatAttachment,
+  type ChatGeneratedFile,
   type ChatMessage,
   type ChatMessageSource,
   type ChatSettings,
@@ -44,6 +46,8 @@ type KeyStatusResponse = {
 type ChatStreamEvent =
   | { type: "text"; text?: string }
   | { type: "source"; source?: ChatMessageSource }
+  | { type: "file"; file?: ChatGeneratedFile }
+  | { type: "error"; error?: { message?: string } }
   | { type: "done" };
 
 export function Chat() {
@@ -194,11 +198,36 @@ export function Chat() {
     [updateThread],
   );
 
+  const addAssistantFile = useCallback(
+    (threadId: string, messageId: string, file: ChatGeneratedFile) => {
+      updateThread(threadId, (thread) => ({
+        ...thread,
+        messages: thread.messages.map((message) => {
+          if (message.id !== messageId) {
+            return message;
+          }
+
+          const currentFiles = message.files ?? [];
+          if (currentFiles.some((current) => current.dataUrl === file.dataUrl)) {
+            return message;
+          }
+
+          return {
+            ...message,
+            files: [...currentFiles, file],
+          };
+        }),
+        updatedAt: new Date().toISOString(),
+      }));
+    },
+    [updateThread],
+  );
+
   const sendMessage = useCallback(
-    (rawContent: string) => {
+    (rawContent: string, attachments: ChatAttachment[] = []) => {
       const content = rawContent.trim();
-      if (!content) {
-        setStatusText("Enter a message before sending.");
+      if (!content && attachments.length === 0) {
+        setStatusText("Enter a message or attach a file before sending.");
         return false;
       }
       if (isStreaming || !activeThread) {
@@ -217,6 +246,7 @@ export function Chat() {
         id: createId(),
         role: "user",
         content,
+        attachments,
         createdAt: new Date().toISOString(),
       };
       const assistantMessage: ChatMessage = {
@@ -260,6 +290,7 @@ export function Chat() {
               systemPrompt: settings.systemPrompt,
               temperature: settings.temperature,
               serverTools: settings.serverTools,
+              multimodal: settings.multimodal,
             }),
             signal: controller.signal,
           });
@@ -294,6 +325,12 @@ export function Chat() {
                 updateAssistantMessage(threadId, assistantMessage.id, streamedContent);
               },
               onSource: (source) => addAssistantSource(threadId, assistantMessage.id, source),
+              onFile: (file) => addAssistantFile(threadId, assistantMessage.id, file),
+              onError: (message) => {
+                streamedContent = message;
+                updateAssistantMessage(threadId, assistantMessage.id, message);
+                setStatusText(message);
+              },
             });
           }
 
@@ -304,6 +341,12 @@ export function Chat() {
               updateAssistantMessage(threadId, assistantMessage.id, streamedContent);
             },
             onSource: (source) => addAssistantSource(threadId, assistantMessage.id, source),
+            onFile: (file) => addAssistantFile(threadId, assistantMessage.id, file),
+            onError: (message) => {
+              streamedContent = message;
+              updateAssistantMessage(threadId, assistantMessage.id, message);
+              setStatusText(message);
+            },
           });
           updateAssistantMessage(
             threadId,
@@ -335,7 +378,7 @@ export function Chat() {
 
       return true;
     },
-    [activeThread, addAssistantSource, isStreaming, settings, updateAssistantMessage, updateThread],
+    [activeThread, addAssistantFile, addAssistantSource, isStreaming, settings, updateAssistantMessage, updateThread],
   );
 
   const stopStreaming = useCallback(() => {
@@ -575,6 +618,8 @@ function processStreamEvents(
   handlers: {
     onText: (text: string) => void;
     onSource: (source: ChatMessageSource) => void;
+    onFile: (file: ChatGeneratedFile) => void;
+    onError: (message: string) => void;
   },
 ) {
   const lines = buffer.split("\n");
@@ -593,12 +638,33 @@ function processStreamEvents(
       if (event.type === "source" && isMessageSource(event.source)) {
         handlers.onSource(event.source);
       }
+      if (event.type === "file" && isGeneratedFile(event.file)) {
+        handlers.onFile(event.file);
+      }
+      if (event.type === "error" && typeof event.error?.message === "string") {
+        handlers.onError(event.error.message);
+      }
     } catch {
       handlers.onText(line);
     }
   }
 
   return remainder;
+}
+
+function isGeneratedFile(value: unknown): value is ChatGeneratedFile {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const file = value as Partial<ChatGeneratedFile>;
+  return (
+    typeof file.id === "string" &&
+    typeof file.mediaType === "string" &&
+    typeof file.dataUrl === "string" &&
+    file.dataUrl.startsWith("data:") &&
+    (file.name === undefined || typeof file.name === "string")
+  );
 }
 
 function isMessageSource(value: unknown): value is ChatMessageSource {

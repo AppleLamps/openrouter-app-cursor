@@ -4,12 +4,32 @@ export type ChatMessage = {
   content: string;
   createdAt?: string;
   sources?: ChatMessageSource[];
+  attachments?: ChatAttachment[];
+  files?: ChatGeneratedFile[];
 };
 
 export type ChatMessageSource = {
   id: string;
   url: string;
   title?: string;
+};
+
+export type ChatAttachmentKind = "image" | "pdf";
+
+export type ChatAttachment = {
+  id: string;
+  name: string;
+  mediaType: string;
+  size: number;
+  dataUrl: string;
+  kind: ChatAttachmentKind;
+};
+
+export type ChatGeneratedFile = {
+  id: string;
+  mediaType: string;
+  dataUrl: string;
+  name?: string;
 };
 
 export type ChatThread = {
@@ -26,6 +46,7 @@ export type ChatSettings = {
   systemPrompt: string;
   temperature: number;
   serverTools: ServerToolSettings;
+  multimodal: MultimodalSettings;
 };
 
 export type SearchEngine = "auto" | "native" | "exa" | "firecrawl" | "parallel" | "perplexity";
@@ -54,6 +75,17 @@ export type ServerToolSettings = {
     enabled: boolean;
     timezone: string;
   };
+};
+
+export type ImageGenerationMode = "text-and-image" | "image-only";
+
+export type MultimodalSettings = {
+  imageGeneration: {
+    enabled: boolean;
+    mode: ImageGenerationMode;
+    aspectRatio: string;
+  };
+  pdfEngine: "auto" | "cloudflare-ai" | "mistral-ocr" | "native";
 };
 
 export type OpenRouterModel = {
@@ -107,11 +139,21 @@ export const DEFAULT_SERVER_TOOLS: ServerToolSettings = {
   },
 };
 
+export const DEFAULT_MULTIMODAL_SETTINGS: MultimodalSettings = {
+  imageGeneration: {
+    enabled: false,
+    mode: "text-and-image",
+    aspectRatio: "auto",
+  },
+  pdfEngine: "auto",
+};
+
 export const DEFAULT_SETTINGS: ChatSettings = {
   model: DEFAULT_MODEL,
   systemPrompt: "You are a concise, helpful assistant.",
   temperature: 0.7,
   serverTools: DEFAULT_SERVER_TOOLS,
+  multimodal: DEFAULT_MULTIMODAL_SETTINGS,
 };
 
 export type ApiStatus = "checking" | "configured" | "missing" | "invalid" | "unknown";

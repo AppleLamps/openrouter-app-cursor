@@ -1,6 +1,15 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { streamText, type JSONValue, type ModelMessage, type TextStreamPart } from "ai";
-import { DEFAULT_MODEL, DEFAULT_SERVER_TOOLS, type ChatMessage, type ChatMessageSource } from "@/lib/types";
+import {
+  DEFAULT_MODEL,
+  DEFAULT_MULTIMODAL_SETTINGS,
+  DEFAULT_SERVER_TOOLS,
+  type ChatAttachment,
+  type ChatGeneratedFile,
+  type ChatMessage,
+  type ChatMessageSource,
+  type MultimodalSettings,
+} from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,6 +21,7 @@ type ChatRequestBody = {
   systemPrompt?: unknown;
   temperature?: unknown;
   serverTools?: unknown;
+  multimodal?: unknown;
 };
 
 type OpenRouterServerTool = {
@@ -23,9 +33,15 @@ type ServerToolValidation = {
   tools: OpenRouterServerTool[];
 };
 
+type MultimodalValidation = {
+  providerOptions: Record<string, JSONValue>;
+};
+
 type StreamEvent =
   | { type: "text"; text: string }
   | { type: "source"; source: ChatMessageSource }
+  | { type: "file"; file: ChatGeneratedFile }
+  | { type: "error"; error: { code: PublicErrorCode; message: string } }
   | { type: "done" };
 
 type PublicErrorCode =
@@ -76,9 +92,14 @@ export async function POST(req: Request) {
         validated.serverTools.tools.length > 0
           ? {
               openrouter: {
+                ...validated.multimodal.providerOptions,
                 tools: validated.serverTools.tools,
               },
             }
+          : Object.keys(validated.multimodal.providerOptions).length > 0
+            ? {
+                openrouter: validated.multimodal.providerOptions,
+              }
           : undefined,
       abortSignal: req.signal,
     });
@@ -98,6 +119,7 @@ function validateRequestBody(body: ChatRequestBody):
       systemPrompt: string;
       temperature: number;
       serverTools: ServerToolValidation;
+      multimodal: MultimodalValidation;
     }
   | {
       ok: false;
@@ -154,11 +176,8 @@ function validateRequestBody(body: ChatRequestBody):
   const chatMessages = body.messages.filter(isChatMessage);
   const messages = chatMessages
     .filter((message) => message.role === "user" || message.role === "assistant")
-    .map((message) => ({
-      role: message.role,
-      content: message.content.trim(),
-    }))
-    .filter((message) => message.content.length > 0) satisfies ModelMessage[];
+    .map(toModelMessage)
+    .filter((message): message is ModelMessage => message !== null);
 
   const lastMessage = messages.at(-1);
   if (!lastMessage || lastMessage.role !== "user") {
@@ -178,7 +197,50 @@ function validateRequestBody(body: ChatRequestBody):
     systemPrompt,
     temperature,
     serverTools: validateServerTools(body.serverTools),
+    multimodal: validateMultimodal(body.multimodal, chatMessages),
   };
+}
+
+function toModelMessage(message: ChatMessage): ModelMessage | null {
+  const content = message.content.trim();
+
+  if (message.role === "assistant") {
+    return content ? { role: "assistant", content } : null;
+  }
+
+  const attachments = (message.attachments ?? []).filter(isChatAttachment);
+  if (attachments.length === 0) {
+    return content ? { role: "user", content } : null;
+  }
+
+  const parts: Array<
+    | { type: "text"; text: string }
+    | { type: "image"; image: string; mediaType: string }
+    | { type: "file"; data: string; filename: string; mediaType: string }
+  > = [];
+
+  if (content) {
+    parts.push({ type: "text", text: content });
+  }
+
+  for (const attachment of attachments) {
+    if (attachment.kind === "image") {
+      parts.push({
+        type: "image",
+        image: attachment.dataUrl,
+        mediaType: attachment.mediaType,
+      });
+    } else {
+      parts.push({
+        type: "file",
+        data: attachment.dataUrl,
+        filename: attachment.name,
+        mediaType: attachment.mediaType,
+      });
+    }
+  }
+
+  return parts.length > 0 ? { role: "user", content: parts } : null;
 }
 
 function isChatMessage(value: unknown): value is ChatMessage {
@@ -190,32 +252,61 @@ function isChatMessage(value: unknown): value is ChatMessage {
   return (
     typeof message.id === "string" &&
     (message.role === "system" || message.role === "user" || message.role === "assistant") &&
-    typeof message.content === "string"
+    typeof message.content === "string" &&
+    (message.attachments === undefined || Array.isArray(message.attachments))
+  );
+}
+
+function isChatAttachment(value: unknown): value is ChatAttachment {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const attachment = value as Partial<ChatAttachment>;
+  return (
+    typeof attachment.id === "string" &&
+    typeof attachment.name === "string" &&
+    typeof attachment.mediaType === "string" &&
+    typeof attachment.size === "number" &&
+    typeof attachment.dataUrl === "string" &&
+    attachment.dataUrl.startsWith("data:") &&
+    (attachment.kind === "image" || attachment.kind === "pdf")
   );
 }
 
 async function createPrimedEventResponse(fullStream: AsyncIterable<TextStreamPart<any>>) {
   const iterator = fullStream[Symbol.asyncIterator]();
-  let firstChunk: IteratorResult<TextStreamPart<any>>;
+  let firstChunk: TextStreamPart<any>;
 
   try {
-    firstChunk = await iterator.next();
+    for (;;) {
+      const chunk = await iterator.next();
+      if (chunk.done) {
+        return jsonError(
+          "The selected model did not return a response. Check the model id.",
+          400,
+          "invalid_model",
+        );
+      }
+
+      const streamError = getStreamPartError(chunk.value);
+      if (streamError) {
+        return errorResponse(streamError);
+      }
+
+      if (isRenderableStreamPart(chunk.value)) {
+        firstChunk = chunk.value;
+        break;
+      }
+    }
   } catch (error) {
     return errorResponse(error);
-  }
-
-  if (firstChunk.done) {
-    return jsonError(
-      "The selected model did not return a response. Check the model id.",
-      400,
-      "invalid_model",
-    );
   }
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      enqueueStreamPart(controller, encoder, firstChunk.value);
+      enqueueStreamPart(controller, encoder, firstChunk);
 
       try {
         for (;;) {
@@ -225,6 +316,15 @@ async function createPrimedEventResponse(fullStream: AsyncIterable<TextStreamPar
             controller.close();
             return;
           }
+
+          const streamError = getStreamPartError(chunk.value);
+          if (streamError) {
+            enqueueEvent(controller, encoder, streamErrorEvent(streamError));
+            enqueueEvent(controller, encoder, { type: "done" });
+            controller.close();
+            return;
+          }
+
           enqueueStreamPart(controller, encoder, chunk.value);
         }
       } catch (error) {
@@ -245,6 +345,30 @@ async function createPrimedEventResponse(fullStream: AsyncIterable<TextStreamPar
   });
 }
 
+function isRenderableStreamPart(part: TextStreamPart<any>) {
+  return (
+    (part.type === "text-delta" && Boolean(part.text)) ||
+    (part.type === "source" && part.sourceType === "url") ||
+    part.type === "file"
+  );
+}
+
+function getStreamPartError(part: TextStreamPart<any>) {
+  const maybeError = part as { type?: string; error?: unknown };
+  return maybeError.type === "error" ? maybeError.error : null;
+}
+
+function streamErrorEvent(error: unknown): StreamEvent {
+  const publicError = publicErrorFrom(error);
+  return {
+    type: "error",
+    error: {
+      code: publicError.code,
+      message: publicError.message,
+    },
+  };
+}
+
 function enqueueStreamPart(
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
@@ -262,6 +386,18 @@ function enqueueStreamPart(
         id: part.id,
         url: part.url,
         title: part.title,
+      },
+    });
+    return;
+  }
+
+  if (part.type === "file") {
+    enqueueEvent(controller, encoder, {
+      type: "file",
+      file: {
+        id: createId(),
+        mediaType: part.file.mediaType,
+        dataUrl: `data:${part.file.mediaType};base64,${part.file.base64}`,
       },
     });
   }
@@ -346,6 +482,84 @@ function validateServerTools(value: unknown): ServerToolValidation {
   return { tools };
 }
 
+function validateMultimodal(value: unknown, messages: ChatMessage[]): MultimodalValidation {
+  const settings = normalizeMultimodalSettings(value);
+  const providerOptions: Record<string, JSONValue> = {};
+  const hasPdfAttachment = messages.some((message) =>
+    message.attachments?.some((attachment) => attachment.kind === "pdf"),
+  );
+
+  if (settings.imageGeneration.enabled) {
+    providerOptions.modalities =
+      settings.imageGeneration.mode === "image-only"
+        ? ["image"]
+        : ["image", "text"];
+
+    if (settings.imageGeneration.aspectRatio !== "auto") {
+      providerOptions.image_config = {
+        aspect_ratio: settings.imageGeneration.aspectRatio,
+      };
+    }
+  }
+
+  if (hasPdfAttachment && settings.pdfEngine !== "auto") {
+    providerOptions.plugins = [
+      {
+        id: "file-parser",
+        pdf: {
+          engine: settings.pdfEngine,
+        },
+      },
+    ];
+  }
+
+  return { providerOptions };
+}
+
+function normalizeMultimodalSettings(value: unknown): MultimodalSettings {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_MULTIMODAL_SETTINGS;
+  }
+
+  const multimodal = value as Partial<MultimodalSettings>;
+  const imageGeneration =
+    multimodal.imageGeneration && typeof multimodal.imageGeneration === "object"
+      ? multimodal.imageGeneration
+      : {};
+
+  return {
+    imageGeneration: {
+      enabled: Boolean((imageGeneration as { enabled?: unknown }).enabled),
+      mode:
+        (imageGeneration as { mode?: unknown }).mode === "image-only"
+          ? "image-only"
+          : DEFAULT_MULTIMODAL_SETTINGS.imageGeneration.mode,
+      aspectRatio: normalizeAspectRatio((imageGeneration as { aspectRatio?: unknown }).aspectRatio),
+    },
+    pdfEngine:
+      multimodal.pdfEngine === "cloudflare-ai" ||
+      multimodal.pdfEngine === "mistral-ocr" ||
+      multimodal.pdfEngine === "native"
+        ? multimodal.pdfEngine
+        : DEFAULT_MULTIMODAL_SETTINGS.pdfEngine,
+  };
+}
+
+function normalizeAspectRatio(value: unknown) {
+  return value === "1:1" ||
+    value === "2:3" ||
+    value === "3:2" ||
+    value === "3:4" ||
+    value === "4:3" ||
+    value === "4:5" ||
+    value === "5:4" ||
+    value === "9:16" ||
+    value === "16:9" ||
+    value === "21:9"
+    ? value
+    : DEFAULT_MULTIMODAL_SETTINGS.imageGeneration.aspectRatio;
+}
+
 function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
@@ -419,22 +633,67 @@ function isValidTimezone(value: string) {
   }
 }
 
+function createId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function errorResponse(error: unknown, signal?: AbortSignal) {
+  const publicError = publicErrorFrom(error, signal);
+  if (publicError.shouldLog) {
+    console.error("OpenRouter chat request failed", error);
+  }
+
+  return jsonError(publicError.message, publicError.status, publicError.code);
+}
+
+function publicErrorFrom(error: unknown, signal?: AbortSignal) {
   if (signal?.aborted || isAbortError(error)) {
-    return jsonError("Streaming request was aborted.", 499, "aborted");
+    return {
+      code: "aborted" as const,
+      status: 499,
+      message: "Streaming request was aborted.",
+      shouldLog: false,
+    };
   }
 
   const status = getErrorStatus(error);
   if (status === 429) {
-    return jsonError("OpenRouter rate limit reached. Try again shortly.", 429, "rate_limited");
+    return {
+      code: "rate_limited" as const,
+      status: 429,
+      message: "OpenRouter rate limit reached. Try again shortly.",
+      shouldLog: false,
+    };
+  }
+
+  if (status === 401 || status === 403) {
+    return {
+      code: "openrouter_failure" as const,
+      status: 401,
+      message: "OpenRouter rejected the API key. Check Settings.",
+      shouldLog: false,
+    };
   }
 
   if (status === 400 || status === 404) {
-    return jsonError("The selected model is not available through OpenRouter.", 400, "invalid_model");
+    return {
+      code: "invalid_model" as const,
+      status: 400,
+      message: "The selected model is not available through OpenRouter.",
+      shouldLog: false,
+    };
   }
 
-  console.error("OpenRouter chat request failed", error);
-  return jsonError("OpenRouter API request failed. Try again.", 502, "openrouter_failure");
+  return {
+    code: "openrouter_failure" as const,
+    status: 502,
+    message: "OpenRouter API request failed. Try again.",
+    shouldLog: true,
+  };
 }
 
 function getErrorStatus(error: unknown) {

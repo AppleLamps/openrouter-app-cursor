@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Check, ChevronDown, Globe2, KeyRound, RefreshCw, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, FileText, Globe2, Image as ImageIcon, KeyRound, RefreshCw, RotateCcw, Search, Trash2, X } from "lucide-react";
 import {
   DEFAULT_MODEL,
+  DEFAULT_MULTIMODAL_SETTINGS,
   DEFAULT_SERVER_TOOLS,
   type ApiStatus,
   type ChatSettings,
   type FetchEngine,
+  type ImageGenerationMode,
   type OpenRouterModel,
   type SearchContextSize,
   type SearchEngine,
@@ -49,6 +51,9 @@ export function SettingsModal({
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState("");
   const [webToolsAdvancedOpen, setWebToolsAdvancedOpen] = useState(false);
+  const [multimodalAdvancedOpen, setMultimodalAdvancedOpen] = useState(false);
+  const serverTools = settings.serverTools ?? DEFAULT_SERVER_TOOLS;
+  const multimodal = settings.multimodal ?? DEFAULT_MULTIMODAL_SETTINGS;
 
   useEffect(() => {
     if (!open) {
@@ -87,6 +92,9 @@ export function SettingsModal({
         const params = new URLSearchParams({
           sort: "most-popular",
         });
+        if (multimodal.imageGeneration.enabled) {
+          params.set("output_modalities", "image");
+        }
         if (modelQuery.trim()) {
           params.set("q", modelQuery.trim());
         }
@@ -119,10 +127,9 @@ export function SettingsModal({
       window.clearTimeout(timeout);
       controller.abort();
     };
-  }, [modelQuery, open]);
+  }, [modelQuery, multimodal.imageGeneration.enabled, open]);
 
   const savedKeyLabel = useMemo(() => maskApiKey(settings.apiKey), [settings.apiKey]);
-  const serverTools = settings.serverTools ?? DEFAULT_SERVER_TOOLS;
 
   if (!open) {
     return null;
@@ -181,6 +188,29 @@ export function SettingsModal({
           ...serverTools.datetime,
           ...updates,
         },
+      },
+    });
+  }
+
+  function updateImageGeneration(updates: Partial<ChatSettings["multimodal"]["imageGeneration"]>) {
+    onSettingsChange({
+      ...settings,
+      multimodal: {
+        ...multimodal,
+        imageGeneration: {
+          ...multimodal.imageGeneration,
+          ...updates,
+        },
+      },
+    });
+  }
+
+  function updatePdfEngine(pdfEngine: ChatSettings["multimodal"]["pdfEngine"]) {
+    onSettingsChange({
+      ...settings,
+      multimodal: {
+        ...multimodal,
+        pdfEngine,
       },
     });
   }
@@ -337,6 +367,80 @@ export function SettingsModal({
                 ))
               )}
             </div>
+          </section>
+
+          <section className="mb-5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-raised)] p-3">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Multimodal</p>
+                <p className="mt-1 text-xs leading-5 text-[color:var(--muted)]">
+                  Attach images or PDFs from the composer. Image generation requires a model that can output images.
+                </p>
+              </div>
+              <ImageIcon size={18} className="mt-0.5 shrink-0 text-[color:var(--accent)]" aria-hidden="true" />
+            </div>
+
+            <div className="space-y-2">
+              <ToolToggle
+                title="Image generation"
+                description="Ask image-capable models to return generated images with the text response."
+                enabled={multimodal.imageGeneration.enabled}
+                onChange={(enabled) => updateImageGeneration({ enabled })}
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMultimodalAdvancedOpen((current) => !current)}
+              className="mt-3 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] px-3 text-left text-sm text-[color:var(--foreground)] transition active:scale-[0.99]"
+            >
+              <span>Advanced multimodal options</span>
+              <ChevronDown
+                size={17}
+                aria-hidden="true"
+                className={`shrink-0 transition ${multimodalAdvancedOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {multimodalAdvancedOpen ? (
+              <div className="mt-3 space-y-4 border-t border-[color:var(--border)] pt-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <SelectField
+                    label="Image output mode"
+                    value={multimodal.imageGeneration.mode}
+                    onChange={(value) => updateImageGeneration({ mode: value as ImageGenerationMode })}
+                    options={["text-and-image", "image-only"]}
+                  />
+                  <SelectField
+                    label="Image aspect ratio"
+                    value={multimodal.imageGeneration.aspectRatio}
+                    onChange={(value) => updateImageGeneration({ aspectRatio: value })}
+                    options={["auto", "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"]}
+                  />
+                </div>
+
+                <label className="block">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <FileText size={16} aria-hidden="true" />
+                    PDF parser
+                  </span>
+                  <select
+                    value={multimodal.pdfEngine}
+                    onChange={(event) => updatePdfEngine(event.target.value as ChatSettings["multimodal"]["pdfEngine"])}
+                    className="min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 text-base text-[color:var(--foreground)]"
+                  >
+                    <option value="auto">auto</option>
+                    <option value="cloudflare-ai">cloudflare-ai</option>
+                    <option value="mistral-ocr">mistral-ocr</option>
+                    <option value="native">native</option>
+                  </select>
+                </label>
+
+                <p className="text-xs leading-5 text-[color:var(--muted)]">
+                  Local images and PDFs are sent to OpenRouter as data URLs. PDF OCR/parser choices and image output models may add provider costs.
+                </p>
+              </div>
+            ) : null}
           </section>
 
           <section className="mb-5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-raised)] p-3">

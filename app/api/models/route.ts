@@ -44,9 +44,10 @@ export async function GET(req: Request) {
   const requestUrl = new URL(req.url);
   const q = requestUrl.searchParams.get("q")?.trim();
   const sort = requestUrl.searchParams.get("sort")?.trim() || "most-popular";
+  const outputModalities = normalizeModalities(requestUrl.searchParams.get("output_modalities"));
 
   const openRouterUrl = new URL("https://openrouter.ai/api/v1/models");
-  openRouterUrl.searchParams.set("output_modalities", "text");
+  openRouterUrl.searchParams.set("output_modalities", outputModalities);
   if (q) {
     openRouterUrl.searchParams.set("q", q);
   }
@@ -145,4 +146,21 @@ function stringValue(value: unknown) {
 
 function stringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normalizeModalities(value: string | null) {
+  if (!value) {
+    return "text";
+  }
+
+  const modalities = Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((item) => item.trim().toLowerCase())
+        .filter((item) => item === "text" || item === "image"),
+    ),
+  );
+
+  return modalities.length > 0 ? modalities.join(",") : "text";
 }

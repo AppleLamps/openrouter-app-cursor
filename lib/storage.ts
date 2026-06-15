@@ -1,7 +1,10 @@
 import {
   DEFAULT_MODEL,
+  DEFAULT_MULTIMODAL_SETTINGS,
   DEFAULT_SERVER_TOOLS,
   DEFAULT_SETTINGS,
+  type ChatAttachment,
+  type ChatGeneratedFile,
   type ChatMessage,
   type ChatSettings,
   type ChatThread,
@@ -27,12 +30,16 @@ function isChatMessage(value: unknown): value is ChatMessage {
 
   const message = value as Partial<ChatMessage>;
   const sources = (message as { sources?: unknown }).sources;
+  const attachments = (message as { attachments?: unknown }).attachments;
+  const files = (message as { files?: unknown }).files;
   return (
     typeof message.id === "string" &&
     (message.role === "system" || message.role === "user" || message.role === "assistant") &&
     typeof message.content === "string" &&
     (message.createdAt === undefined || typeof message.createdAt === "string") &&
-    (sources === undefined || Array.isArray(sources))
+    (sources === undefined || Array.isArray(sources)) &&
+    (attachments === undefined || Array.isArray(attachments)) &&
+    (files === undefined || Array.isArray(files))
   );
 }
 
@@ -62,7 +69,48 @@ function normalizeSettings(value: unknown): ChatSettings {
         : DEFAULT_SETTINGS.systemPrompt,
     temperature,
     serverTools: normalizeServerTools(settings.serverTools),
+    multimodal: normalizeMultimodalSettings(settings.multimodal),
   };
+}
+
+function normalizeChatMessage(message: ChatMessage): ChatMessage {
+  return {
+    ...message,
+    attachments: message.attachments?.filter(isChatAttachment),
+    files: message.files?.filter(isChatGeneratedFile),
+  };
+}
+
+function isChatAttachment(value: unknown): value is ChatAttachment {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const attachment = value as Partial<ChatAttachment>;
+  return (
+    typeof attachment.id === "string" &&
+    typeof attachment.name === "string" &&
+    typeof attachment.mediaType === "string" &&
+    typeof attachment.size === "number" &&
+    typeof attachment.dataUrl === "string" &&
+    attachment.dataUrl.startsWith("data:") &&
+    (attachment.kind === "image" || attachment.kind === "pdf")
+  );
+}
+
+function isChatGeneratedFile(value: unknown): value is ChatGeneratedFile {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const file = value as Partial<ChatGeneratedFile>;
+  return (
+    typeof file.id === "string" &&
+    typeof file.mediaType === "string" &&
+    typeof file.dataUrl === "string" &&
+    file.dataUrl.startsWith("data:") &&
+    (file.name === undefined || typeof file.name === "string")
+  );
 }
 
 function normalizeServerTools(value: unknown): ServerToolSettings {
@@ -101,6 +149,38 @@ function normalizeServerTools(value: unknown): ServerToolSettings {
           ? (datetime as { timezone: string }).timezone.trim()
           : DEFAULT_SERVER_TOOLS.datetime.timezone,
     },
+  };
+}
+
+function normalizeMultimodalSettings(value: unknown): ChatSettings["multimodal"] {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_MULTIMODAL_SETTINGS;
+  }
+
+  const multimodal = value as Partial<ChatSettings["multimodal"]>;
+  const imageGeneration =
+    multimodal.imageGeneration && typeof multimodal.imageGeneration === "object"
+      ? multimodal.imageGeneration
+      : {};
+  const pdfEngine = multimodal.pdfEngine;
+
+  return {
+    imageGeneration: {
+      enabled: Boolean((imageGeneration as { enabled?: unknown }).enabled),
+      mode:
+        (imageGeneration as { mode?: unknown }).mode === "image-only"
+          ? "image-only"
+          : DEFAULT_MULTIMODAL_SETTINGS.imageGeneration.mode,
+      aspectRatio:
+        typeof (imageGeneration as { aspectRatio?: unknown }).aspectRatio === "string" &&
+        (imageGeneration as { aspectRatio: string }).aspectRatio.trim()
+          ? (imageGeneration as { aspectRatio: string }).aspectRatio.trim()
+          : DEFAULT_MULTIMODAL_SETTINGS.imageGeneration.aspectRatio,
+    },
+    pdfEngine:
+      pdfEngine === "cloudflare-ai" || pdfEngine === "mistral-ocr" || pdfEngine === "native"
+        ? pdfEngine
+        : DEFAULT_MULTIMODAL_SETTINGS.pdfEngine,
   };
 }
 
@@ -196,7 +276,7 @@ function isChatThread(value: unknown): value is ChatThread {
 }
 
 function normalizeThread(thread: ChatThread): ChatThread {
-  const messages = thread.messages.filter(isChatMessage);
+  const messages = thread.messages.filter(isChatMessage).map(normalizeChatMessage);
   return {
     ...thread,
     title: thread.title.trim() || titleFromMessages(messages),

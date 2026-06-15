@@ -24,8 +24,17 @@ Chat uses the OpenRouter API key saved in the app Settings screen. `OPENROUTER_A
 - Use the selected model field for a custom model id when the search list does not show it.
 - Change the system prompt and temperature in Settings.
 - Enable OpenRouter server tools for Web Search, Web Fetch, and Datetime. These are off by default; Web Search and Web Fetch are beta OpenRouter features and may add tool/provider costs.
+- Attach images or PDFs from the composer. Enable image generation in Settings only when using an image-output model.
 - Clear chat clears only the active chat thread.
 - Reset settings restores defaults and removes the locally saved key.
+
+## Multimodal
+
+- Image understanding supports PNG, JPEG, WebP, and GIF uploads. Use a vision-capable OpenRouter model.
+- PDF uploads are sent through OpenRouter as file parts. The Settings PDF parser can stay on `auto` or be set to `cloudflare-ai`, `mistral-ocr`, or `native`.
+- Image generation is off by default. Turn it on in Settings, then select a model that supports image output. When enabled, the model picker searches image-output models.
+- Generated images are rendered under the assistant response and can be saved from the message.
+- Attachments are stored in local chat history as data URLs. v1 limits uploads to 4 files per message and 5 MB per file to reduce localStorage pressure.
 
 ## Web Tools
 
