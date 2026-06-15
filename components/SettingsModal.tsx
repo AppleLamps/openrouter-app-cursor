@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Check, ChevronDown, FileText, Globe2, Image as ImageIcon, KeyRound, Minimize2, RefreshCw, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, Database, FileText, Globe2, Image as ImageIcon, KeyRound, Minimize2, RefreshCw, RotateCcw, Search, Trash2, X } from "lucide-react";
 import {
   DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MODEL,
   DEFAULT_MULTIMODAL_SETTINGS,
+  DEFAULT_RESPONSE_CACHING,
   DEFAULT_SERVER_TOOLS,
   type ApiStatus,
   type ChatSettings,
@@ -56,6 +57,7 @@ export function SettingsModal({
   const serverTools = settings.serverTools ?? DEFAULT_SERVER_TOOLS;
   const multimodal = settings.multimodal ?? DEFAULT_MULTIMODAL_SETTINGS;
   const messageTransforms = settings.messageTransforms ?? DEFAULT_MESSAGE_TRANSFORMS;
+  const responseCaching = settings.responseCaching ?? DEFAULT_RESPONSE_CACHING;
 
   useEffect(() => {
     if (!open) {
@@ -230,6 +232,16 @@ export function SettingsModal({
     });
   }
 
+  function updateResponseCaching(updates: Partial<ChatSettings["responseCaching"]>) {
+    onSettingsChange({
+      ...settings,
+      responseCaching: {
+        ...responseCaching,
+        ...updates,
+      },
+    });
+  }
+
   return (
     <div
       className="modal-safe fixed inset-0 z-[70] flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center"
@@ -382,6 +394,41 @@ export function SettingsModal({
                 ))
               )}
             </div>
+          </section>
+
+          <section className="mb-5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-raised)] p-3">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Response caching</p>
+                <p className="mt-1 text-xs leading-5 text-[color:var(--muted)]">
+                  Cache identical OpenRouter responses to reduce latency and cost. Beta feature.
+                </p>
+              </div>
+              <Database size={18} className="mt-0.5 shrink-0 text-[color:var(--accent)]" aria-hidden="true" />
+            </div>
+
+            <ToolToggle
+              title="Response caching"
+              description="OpenRouter can replay identical successful streaming responses from cache."
+              enabled={responseCaching.enabled}
+              onChange={(enabled) => updateResponseCaching({ enabled })}
+            />
+
+            {responseCaching.enabled ? (
+              <div className="mt-3 border-t border-[color:var(--border)] pt-3">
+                <NumberField
+                  label="Cache TTL seconds"
+                  value={responseCaching.ttlSeconds}
+                  min={1}
+                  max={86400}
+                  onChange={(ttlSeconds) => updateResponseCaching({ ttlSeconds })}
+                />
+              </div>
+            ) : null}
+
+            <p className="mt-3 text-xs leading-5 text-[color:var(--muted)]">
+              Cached responses are scoped to your API key and retained by OpenRouter only for the TTL. Keep this off for private or one-off prompts.
+            </p>
           </section>
 
           <section className="mb-5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-raised)] p-3">

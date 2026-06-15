@@ -2,6 +2,7 @@ import {
   DEFAULT_MODEL,
   DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MULTIMODAL_SETTINGS,
+  DEFAULT_RESPONSE_CACHING,
   DEFAULT_SERVER_TOOLS,
   DEFAULT_SETTINGS,
   type ChatAttachment,
@@ -72,6 +73,7 @@ function normalizeSettings(value: unknown): ChatSettings {
     serverTools: normalizeServerTools(settings.serverTools),
     multimodal: normalizeMultimodalSettings(settings.multimodal),
     messageTransforms: normalizeMessageTransforms(settings.messageTransforms),
+    responseCaching: normalizeResponseCaching(settings.responseCaching),
   };
 }
 
@@ -204,6 +206,24 @@ function normalizeMessageTransforms(value: unknown): ChatSettings["messageTransf
           ? (contextCompression as { enabled: boolean }).enabled
           : DEFAULT_MESSAGE_TRANSFORMS.contextCompression.enabled,
     },
+  };
+}
+
+function normalizeResponseCaching(value: unknown): ChatSettings["responseCaching"] {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_RESPONSE_CACHING;
+  }
+
+  const caching = value as Partial<ChatSettings["responseCaching"]>;
+
+  return {
+    enabled: Boolean(caching.enabled),
+    ttlSeconds: clampNumber(
+      caching.ttlSeconds,
+      1,
+      86400,
+      DEFAULT_RESPONSE_CACHING.ttlSeconds,
+    ),
   };
 }
 

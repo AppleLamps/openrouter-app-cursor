@@ -24,6 +24,7 @@ Chat uses the OpenRouter API key saved in the app Settings screen. `OPENROUTER_A
 - Use the selected model field for a custom model id when the search list does not show it.
 - Change the system prompt and temperature in Settings.
 - Keep Auto compression enabled so OpenRouter can compress oversized chat prompts before they hit model context or message-count limits.
+- Enable Response caching when you want identical OpenRouter requests to replay from cache. This beta feature is off by default.
 - Enable OpenRouter server tools for Web Search, Web Fetch, and Datetime. These are off by default; Web Search and Web Fetch are beta OpenRouter features and may add tool/provider costs.
 - Attach images or PDFs from the composer. Enable image generation in Settings only when using an image-output model.
 - Clear chat clears only the active chat thread.
@@ -34,6 +35,12 @@ Chat uses the OpenRouter API key saved in the app Settings screen. `OPENROUTER_A
 Auto compression is on by default. The chat route sends OpenRouter's `context-compression` plugin with each request, which lets OpenRouter trim or remove middle prompt content only when a chat would exceed the selected model context window or message-count limits.
 
 Turn Auto compression off in Settings if exact recall of the full transcript matters more than avoiding context-limit errors. When disabled, the route explicitly sends `context-compression` with `enabled: false`.
+
+## Response Caching
+
+Response caching is off by default. When enabled in Settings, the chat route sends `X-OpenRouter-Cache: true` and `X-OpenRouter-Cache-TTL` with each OpenRouter request. TTL is clamped from 1 second to 86400 seconds; the default is 300 seconds.
+
+OpenRouter cache hits replay identical successful responses with no billing, but cached response data is temporarily retained by OpenRouter for the TTL and scoped to your API key. Leave this off for private, sensitive, or one-off prompts.
 
 ## Multimodal
 

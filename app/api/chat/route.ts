@@ -4,6 +4,7 @@ import {
   DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MODEL,
   DEFAULT_MULTIMODAL_SETTINGS,
+  DEFAULT_RESPONSE_CACHING,
   DEFAULT_SERVER_TOOLS,
   type ChatAttachment,
   type ChatGeneratedFile,
@@ -11,6 +12,7 @@ import {
   type ChatMessageSource,
   type MessageTransformSettings,
   type MultimodalSettings,
+  type ResponseCachingSettings,
 } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -25,6 +27,7 @@ type ChatRequestBody = {
   serverTools?: unknown;
   multimodal?: unknown;
   messageTransforms?: unknown;
+  responseCaching?: unknown;
 };
 
 type OpenRouterServerTool = {
@@ -86,6 +89,7 @@ export async function POST(req: Request) {
     headers: {
       "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
       "X-OpenRouter-Title": "OpenRouter Chat PWA",
+      ...createResponseCachingHeaders(validated.responseCaching),
     },
   });
 
@@ -122,6 +126,7 @@ function validateRequestBody(body: ChatRequestBody):
       serverTools: ServerToolValidation;
       multimodal: MultimodalValidation;
       messageTransforms: MessageTransformValidation;
+      responseCaching: ResponseCachingSettings;
     }
   | {
       ok: false;
@@ -201,6 +206,20 @@ function validateRequestBody(body: ChatRequestBody):
     serverTools: validateServerTools(body.serverTools),
     multimodal: validateMultimodal(body.multimodal, chatMessages),
     messageTransforms: validateMessageTransforms(body.messageTransforms),
+    responseCaching: normalizeResponseCaching(body.responseCaching),
+  };
+}
+
+function createResponseCachingHeaders(settings: ResponseCachingSettings): Record<string, string> {
+  if (!settings.enabled) {
+    return {
+      "X-OpenRouter-Cache": "false",
+    };
+  }
+
+  return {
+    "X-OpenRouter-Cache": "true",
+    "X-OpenRouter-Cache-TTL": String(settings.ttlSeconds),
   };
 }
 
@@ -607,6 +626,24 @@ function normalizeMessageTransforms(value: unknown): MessageTransformSettings {
           ? (contextCompression as { enabled: boolean }).enabled
           : DEFAULT_MESSAGE_TRANSFORMS.contextCompression.enabled,
     },
+  };
+}
+
+function normalizeResponseCaching(value: unknown): ResponseCachingSettings {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_RESPONSE_CACHING;
+  }
+
+  const caching = value as Partial<ResponseCachingSettings>;
+
+  return {
+    enabled: Boolean(caching.enabled),
+    ttlSeconds: clampInteger(
+      caching.ttlSeconds,
+      1,
+      86400,
+      DEFAULT_RESPONSE_CACHING.ttlSeconds,
+    ),
   };
 }
 

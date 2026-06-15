@@ -292,6 +292,7 @@ export function Chat() {
               serverTools: settings.serverTools,
               multimodal: settings.multimodal,
               messageTransforms: settings.messageTransforms,
+              responseCaching: settings.responseCaching,
             }),
             signal: controller.signal,
           });

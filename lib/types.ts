@@ -48,6 +48,7 @@ export type ChatSettings = {
   serverTools: ServerToolSettings;
   multimodal: MultimodalSettings;
   messageTransforms: MessageTransformSettings;
+  responseCaching: ResponseCachingSettings;
 };
 
 export type SearchEngine = "auto" | "native" | "exa" | "firecrawl" | "parallel" | "perplexity";
@@ -93,6 +94,11 @@ export type MessageTransformSettings = {
   contextCompression: {
     enabled: boolean;
   };
+};
+
+export type ResponseCachingSettings = {
+  enabled: boolean;
+  ttlSeconds: number;
 };
 
 export type OpenRouterModel = {
@@ -161,6 +167,11 @@ export const DEFAULT_MESSAGE_TRANSFORMS: MessageTransformSettings = {
   },
 };
 
+export const DEFAULT_RESPONSE_CACHING: ResponseCachingSettings = {
+  enabled: false,
+  ttlSeconds: 300,
+};
+
 export const DEFAULT_SETTINGS: ChatSettings = {
   model: DEFAULT_MODEL,
   systemPrompt: "You are a concise, helpful assistant.",
@@ -168,6 +179,7 @@ export const DEFAULT_SETTINGS: ChatSettings = {
   serverTools: DEFAULT_SERVER_TOOLS,
   multimodal: DEFAULT_MULTIMODAL_SETTINGS,
   messageTransforms: DEFAULT_MESSAGE_TRANSFORMS,
+  responseCaching: DEFAULT_RESPONSE_CACHING,
 };
 
 export type ApiStatus = "checking" | "configured" | "missing" | "invalid" | "unknown";
