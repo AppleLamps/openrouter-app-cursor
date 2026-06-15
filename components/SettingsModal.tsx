@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, Check, ChevronDown, FileText, Globe2, Image as ImageIcon, KeyRound, RefreshCw, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { CalendarClock, Check, ChevronDown, FileText, Globe2, Image as ImageIcon, KeyRound, Minimize2, RefreshCw, RotateCcw, Search, Trash2, X } from "lucide-react";
 import {
+  DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MODEL,
   DEFAULT_MULTIMODAL_SETTINGS,
   DEFAULT_SERVER_TOOLS,
@@ -54,6 +55,7 @@ export function SettingsModal({
   const [multimodalAdvancedOpen, setMultimodalAdvancedOpen] = useState(false);
   const serverTools = settings.serverTools ?? DEFAULT_SERVER_TOOLS;
   const multimodal = settings.multimodal ?? DEFAULT_MULTIMODAL_SETTINGS;
+  const messageTransforms = settings.messageTransforms ?? DEFAULT_MESSAGE_TRANSFORMS;
 
   useEffect(() => {
     if (!open) {
@@ -215,6 +217,19 @@ export function SettingsModal({
     });
   }
 
+  function updateContextCompression(enabled: boolean) {
+    onSettingsChange({
+      ...settings,
+      messageTransforms: {
+        ...messageTransforms,
+        contextCompression: {
+          ...messageTransforms.contextCompression,
+          enabled,
+        },
+      },
+    });
+  }
+
   return (
     <div
       className="modal-safe fixed inset-0 z-[70] flex items-end bg-black/60 backdrop-blur-sm sm:items-center sm:justify-center"
@@ -367,6 +382,29 @@ export function SettingsModal({
                 ))
               )}
             </div>
+          </section>
+
+          <section className="mb-5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-raised)] p-3">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Message transforms</p>
+                <p className="mt-1 text-xs leading-5 text-[color:var(--muted)]">
+                  Automatically compress long chats when they exceed the selected model context or message-count limits.
+                </p>
+              </div>
+              <Minimize2 size={18} className="mt-0.5 shrink-0 text-[color:var(--accent)]" aria-hidden="true" />
+            </div>
+
+            <ToolToggle
+              title="Auto compression"
+              description="OpenRouter trims the middle of oversized prompts so long chats can continue."
+              enabled={messageTransforms.contextCompression.enabled}
+              onChange={updateContextCompression}
+            />
+
+            <p className="mt-3 text-xs leading-5 text-[color:var(--muted)]">
+              Keep this on for long conversations. Turn it off only when exact recall of the full transcript matters more than avoiding context-limit errors.
+            </p>
           </section>
 
           <section className="mb-5 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-raised)] p-3">

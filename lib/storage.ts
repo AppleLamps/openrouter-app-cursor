@@ -1,5 +1,6 @@
 import {
   DEFAULT_MODEL,
+  DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MULTIMODAL_SETTINGS,
   DEFAULT_SERVER_TOOLS,
   DEFAULT_SETTINGS,
@@ -70,6 +71,7 @@ function normalizeSettings(value: unknown): ChatSettings {
     temperature,
     serverTools: normalizeServerTools(settings.serverTools),
     multimodal: normalizeMultimodalSettings(settings.multimodal),
+    messageTransforms: normalizeMessageTransforms(settings.messageTransforms),
   };
 }
 
@@ -181,6 +183,27 @@ function normalizeMultimodalSettings(value: unknown): ChatSettings["multimodal"]
       pdfEngine === "cloudflare-ai" || pdfEngine === "mistral-ocr" || pdfEngine === "native"
         ? pdfEngine
         : DEFAULT_MULTIMODAL_SETTINGS.pdfEngine,
+  };
+}
+
+function normalizeMessageTransforms(value: unknown): ChatSettings["messageTransforms"] {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_MESSAGE_TRANSFORMS;
+  }
+
+  const transforms = value as Partial<ChatSettings["messageTransforms"]>;
+  const contextCompression =
+    transforms.contextCompression && typeof transforms.contextCompression === "object"
+      ? transforms.contextCompression
+      : {};
+
+  return {
+    contextCompression: {
+      enabled:
+        typeof (contextCompression as { enabled?: unknown }).enabled === "boolean"
+          ? (contextCompression as { enabled: boolean }).enabled
+          : DEFAULT_MESSAGE_TRANSFORMS.contextCompression.enabled,
+    },
   };
 }
 

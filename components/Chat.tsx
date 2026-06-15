@@ -291,6 +291,7 @@ export function Chat() {
               temperature: settings.temperature,
               serverTools: settings.serverTools,
               multimodal: settings.multimodal,
+              messageTransforms: settings.messageTransforms,
             }),
             signal: controller.signal,
           });

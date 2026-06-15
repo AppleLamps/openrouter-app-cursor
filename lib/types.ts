@@ -47,6 +47,7 @@ export type ChatSettings = {
   temperature: number;
   serverTools: ServerToolSettings;
   multimodal: MultimodalSettings;
+  messageTransforms: MessageTransformSettings;
 };
 
 export type SearchEngine = "auto" | "native" | "exa" | "firecrawl" | "parallel" | "perplexity";
@@ -86,6 +87,12 @@ export type MultimodalSettings = {
     aspectRatio: string;
   };
   pdfEngine: "auto" | "cloudflare-ai" | "mistral-ocr" | "native";
+};
+
+export type MessageTransformSettings = {
+  contextCompression: {
+    enabled: boolean;
+  };
 };
 
 export type OpenRouterModel = {
@@ -148,12 +155,19 @@ export const DEFAULT_MULTIMODAL_SETTINGS: MultimodalSettings = {
   pdfEngine: "auto",
 };
 
+export const DEFAULT_MESSAGE_TRANSFORMS: MessageTransformSettings = {
+  contextCompression: {
+    enabled: true,
+  },
+};
+
 export const DEFAULT_SETTINGS: ChatSettings = {
   model: DEFAULT_MODEL,
   systemPrompt: "You are a concise, helpful assistant.",
   temperature: 0.7,
   serverTools: DEFAULT_SERVER_TOOLS,
   multimodal: DEFAULT_MULTIMODAL_SETTINGS,
+  messageTransforms: DEFAULT_MESSAGE_TRANSFORMS,
 };
 
 export type ApiStatus = "checking" | "configured" | "missing" | "invalid" | "unknown";

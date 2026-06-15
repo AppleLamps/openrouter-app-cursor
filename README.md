@@ -23,10 +23,17 @@ Chat uses the OpenRouter API key saved in the app Settings screen. `OPENROUTER_A
 - Search current OpenRouter models from the Settings model picker. The picker is powered by `GET https://openrouter.ai/api/v1/models` through `app/api/models/route.ts`.
 - Use the selected model field for a custom model id when the search list does not show it.
 - Change the system prompt and temperature in Settings.
+- Keep Auto compression enabled so OpenRouter can compress oversized chat prompts before they hit model context or message-count limits.
 - Enable OpenRouter server tools for Web Search, Web Fetch, and Datetime. These are off by default; Web Search and Web Fetch are beta OpenRouter features and may add tool/provider costs.
 - Attach images or PDFs from the composer. Enable image generation in Settings only when using an image-output model.
 - Clear chat clears only the active chat thread.
 - Reset settings restores defaults and removes the locally saved key.
+
+## Message Transforms
+
+Auto compression is on by default. The chat route sends OpenRouter's `context-compression` plugin with each request, which lets OpenRouter trim or remove middle prompt content only when a chat would exceed the selected model context window or message-count limits.
+
+Turn Auto compression off in Settings if exact recall of the full transcript matters more than avoiding context-limit errors. When disabled, the route explicitly sends `context-compression` with `enabled: false`.
 
 ## Multimodal
 

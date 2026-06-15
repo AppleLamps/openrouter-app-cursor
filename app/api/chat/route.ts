@@ -1,6 +1,7 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { streamText, type JSONValue, type ModelMessage, type TextStreamPart } from "ai";
 import {
+  DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MODEL,
   DEFAULT_MULTIMODAL_SETTINGS,
   DEFAULT_SERVER_TOOLS,
@@ -8,6 +9,7 @@ import {
   type ChatGeneratedFile,
   type ChatMessage,
   type ChatMessageSource,
+  type MessageTransformSettings,
   type MultimodalSettings,
 } from "@/lib/types";
 
@@ -22,6 +24,7 @@ type ChatRequestBody = {
   temperature?: unknown;
   serverTools?: unknown;
   multimodal?: unknown;
+  messageTransforms?: unknown;
 };
 
 type OpenRouterServerTool = {
@@ -34,6 +37,10 @@ type ServerToolValidation = {
 };
 
 type MultimodalValidation = {
+  providerOptions: Record<string, JSONValue>;
+};
+
+type MessageTransformValidation = {
   providerOptions: Record<string, JSONValue>;
 };
 
@@ -83,24 +90,18 @@ export async function POST(req: Request) {
   });
 
   try {
+    const openrouterOptions = mergeOpenRouterOptions(
+      validated.multimodal.providerOptions,
+      validated.messageTransforms.providerOptions,
+      validated.serverTools.tools.length > 0 ? { tools: validated.serverTools.tools } : undefined,
+    );
+
     const result = streamText({
       model: openrouter.chat(validated.model),
       messages: validated.messages,
       system: validated.systemPrompt || undefined,
       temperature: validated.temperature,
-      providerOptions:
-        validated.serverTools.tools.length > 0
-          ? {
-              openrouter: {
-                ...validated.multimodal.providerOptions,
-                tools: validated.serverTools.tools,
-              },
-            }
-          : Object.keys(validated.multimodal.providerOptions).length > 0
-            ? {
-                openrouter: validated.multimodal.providerOptions,
-              }
-          : undefined,
+      providerOptions: openrouterOptions ? { openrouter: openrouterOptions } : undefined,
       abortSignal: req.signal,
     });
 
@@ -120,6 +121,7 @@ function validateRequestBody(body: ChatRequestBody):
       temperature: number;
       serverTools: ServerToolValidation;
       multimodal: MultimodalValidation;
+      messageTransforms: MessageTransformValidation;
     }
   | {
       ok: false;
@@ -198,7 +200,36 @@ function validateRequestBody(body: ChatRequestBody):
     temperature,
     serverTools: validateServerTools(body.serverTools),
     multimodal: validateMultimodal(body.multimodal, chatMessages),
+    messageTransforms: validateMessageTransforms(body.messageTransforms),
   };
+}
+
+function mergeOpenRouterOptions(
+  ...optionsList: Array<Record<string, JSONValue> | undefined>
+): Record<string, JSONValue> | undefined {
+  const merged: Record<string, JSONValue> = {};
+  const plugins: JSONValue[] = [];
+
+  for (const options of optionsList) {
+    if (!options) {
+      continue;
+    }
+
+    for (const [key, value] of Object.entries(options)) {
+      if (key === "plugins" && Array.isArray(value)) {
+        plugins.push(...value);
+        continue;
+      }
+
+      merged[key] = value;
+    }
+  }
+
+  if (plugins.length > 0) {
+    merged.plugins = plugins;
+  }
+
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
 function toModelMessage(message: ChatMessage): ModelMessage | null {
@@ -516,6 +547,19 @@ function validateMultimodal(value: unknown, messages: ChatMessage[]): Multimodal
   return { providerOptions };
 }
 
+function validateMessageTransforms(value: unknown): MessageTransformValidation {
+  const settings = normalizeMessageTransforms(value);
+  const plugin = settings.contextCompression.enabled
+    ? { id: "context-compression" }
+    : { id: "context-compression", enabled: false };
+
+  return {
+    providerOptions: {
+      plugins: [plugin],
+    },
+  };
+}
+
 function normalizeMultimodalSettings(value: unknown): MultimodalSettings {
   if (!value || typeof value !== "object") {
     return DEFAULT_MULTIMODAL_SETTINGS;
@@ -542,6 +586,27 @@ function normalizeMultimodalSettings(value: unknown): MultimodalSettings {
       multimodal.pdfEngine === "native"
         ? multimodal.pdfEngine
         : DEFAULT_MULTIMODAL_SETTINGS.pdfEngine,
+  };
+}
+
+function normalizeMessageTransforms(value: unknown): MessageTransformSettings {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_MESSAGE_TRANSFORMS;
+  }
+
+  const transforms = value as Partial<MessageTransformSettings>;
+  const contextCompression =
+    transforms.contextCompression && typeof transforms.contextCompression === "object"
+      ? transforms.contextCompression
+      : {};
+
+  return {
+    contextCompression: {
+      enabled:
+        typeof (contextCompression as { enabled?: unknown }).enabled === "boolean"
+          ? (contextCompression as { enabled: boolean }).enabled
+          : DEFAULT_MESSAGE_TRANSFORMS.contextCompression.enabled,
+    },
   };
 }
 
