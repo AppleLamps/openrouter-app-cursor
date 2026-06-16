@@ -9,6 +9,7 @@ import {
   isChatAttachment,
   isChatGeneratedFile,
   isChatMessage,
+  isChatThread,
   normalizeMessageTransforms,
   normalizeMultimodalSettings,
   normalizeResponseCaching,
@@ -74,22 +75,6 @@ function titleFromMessages(messages: ChatMessage[]) {
 
   const compact = firstUserMessage.content.replace(/\s+/g, " ").trim();
   return compact.length > 42 ? `${compact.slice(0, 39).trim()}...` : compact;
-}
-
-function isChatThread(value: unknown): value is ChatThread {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const thread = value as Partial<ChatThread>;
-  return (
-    typeof thread.id === "string" &&
-    typeof thread.title === "string" &&
-    Array.isArray(thread.messages) &&
-    thread.messages.every(isChatMessage) &&
-    typeof thread.createdAt === "string" &&
-    typeof thread.updatedAt === "string"
-  );
 }
 
 function normalizeThread(thread: ChatThread): ChatThread {

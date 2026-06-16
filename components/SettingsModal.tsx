@@ -20,6 +20,11 @@ type SettingsModalProps = {
   onSettingsChange: (settings: ChatSettings) => void;
   onClearChat: () => void;
   onResetSettings: () => void;
+  onExportAllThreads: () => void;
+  onExportCurrentThread: () => void;
+  onImportThreads: (file: File) => void;
+  importNotice?: string;
+  canExportCurrentThread: boolean;
 };
 
 type SettingsSectionId = "setup" | "model" | "tools" | "data";
@@ -28,7 +33,7 @@ const SETTINGS_SECTIONS: { id: SettingsSectionId; label: string; description: st
   { id: "setup", label: "Setup", description: "API key" },
   { id: "model", label: "Model", description: "Behavior" },
   { id: "tools", label: "Tools", description: "Features" },
-  { id: "data", label: "Data", description: "Reset" },
+  { id: "data", label: "Data", description: "Backup" },
 ];
 
 export function SettingsModal({
@@ -41,6 +46,11 @@ export function SettingsModal({
   onSettingsChange,
   onClearChat,
   onResetSettings,
+  onExportAllThreads,
+  onExportCurrentThread,
+  onImportThreads,
+  importNotice,
+  canExportCurrentThread,
 }: SettingsModalProps) {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("setup");
   const panelRef = useRef<HTMLElement>(null);
@@ -195,7 +205,15 @@ export function SettingsModal({
           ) : null}
 
           {activeSection === "data" ? (
-            <DataSettingsSection onClearChat={onClearChat} onResetSettings={onResetSettings} />
+            <DataSettingsSection
+              onClearChat={onClearChat}
+              onResetSettings={onResetSettings}
+              onExportAllThreads={onExportAllThreads}
+              onExportCurrentThread={onExportCurrentThread}
+              onImportThreads={onImportThreads}
+              importNotice={importNotice}
+              canExportCurrentThread={canExportCurrentThread}
+            />
           ) : null}
         </div>
       </section>

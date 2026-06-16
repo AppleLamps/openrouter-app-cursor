@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Check,
   Copy,
   Download,
   FileText,
+  GitBranch,
   Image as ImageIcon,
+  Pencil,
   RotateCcw,
   ThumbsDown,
   ThumbsUp,
   Volume2,
   VolumeX,
+  X,
 } from "lucide-react";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import type { ChatAttachment, ChatGeneratedFile, ChatMessage, ChatMessageSource } from "@/lib/types";
@@ -24,6 +27,8 @@ type MessageBubbleProps = {
   isStreaming?: boolean;
   showThinking?: boolean;
   onRetry?: () => void;
+  onEditMessage?: (messageId: string, newContent: string) => void;
+  onForkFromMessage?: (messageId: string) => void;
 };
 
 type Feedback = "up" | "down" | null;
@@ -34,6 +39,8 @@ export function MessageBubble({
   isStreaming = false,
   showThinking = false,
   onRetry,
+  onEditMessage,
+  onForkFromMessage,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const displayContent = contentOverride ?? message.content;
@@ -42,6 +49,27 @@ export function MessageBubble({
   const [copied, setCopied] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [speaking, setSpeaking] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.content);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    setDraft(message.content);
+  }, [message.content]);
+
+  useEffect(() => {
+    if (!editing) {
+      return;
+    }
+
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 148)}px`;
+  }, [draft, editing]);
 
   useEffect(() => {
     if (!speaking || typeof window === "undefined" || !("speechSynthesis" in window)) {
@@ -87,24 +115,79 @@ export function MessageBubble({
     setSpeaking(true);
   }
 
+  function saveEdit() {
+    const next = draft.trim();
+    if (!next && attachments.length === 0) {
+      return;
+    }
+
+    onEditMessage?.(message.id, next);
+    setEditing(false);
+  }
+
+  function cancelEdit() {
+    setDraft(message.content);
+    setEditing(false);
+  }
+
   if (isUser) {
     return (
       <article className="group flex justify-end">
         <div className="max-w-[86%] md:max-w-[68%]">
           <div className="rounded-xl bg-(--user-bubble) px-4 py-2.5 text-[0.95rem] leading-6 text-(--foreground)">
-            {message.content ? <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p> : null}
+            {editing ? (
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                rows={1}
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    cancelEdit();
+                  }
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    saveEdit();
+                  }
+                }}
+                className="block max-h-36 min-h-10 w-full resize-none bg-transparent text-[0.95rem] leading-6 text-(--foreground) outline-none"
+              />
+            ) : message.content ? (
+              <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p>
+            ) : null}
             <AttachmentGrid attachments={attachments} align="right" />
           </div>
-          <MessageActions
-            align="right"
-            timestamp={formatTimestamp(message.createdAt)}
-            copied={copied}
-            speaking={speaking}
-            feedback={feedback}
-            onCopy={copyMessage}
-            onSpeak={toggleSpeech}
-            onFeedback={setFeedback}
-          />
+          {editing ? (
+            <div className="mt-2 flex justify-end gap-1">
+              <ActionButton label="Save edit" onClick={saveEdit}>
+                <Check size={15} aria-hidden="true" />
+              </ActionButton>
+              <ActionButton label="Cancel edit" onClick={cancelEdit}>
+                <X size={15} aria-hidden="true" />
+              </ActionButton>
+            </div>
+          ) : (
+            <MessageActions
+              align="right"
+              timestamp={formatTimestamp(message.createdAt)}
+              copied={copied}
+              speaking={speaking}
+              feedback={feedback}
+              onCopy={copyMessage}
+              onSpeak={toggleSpeech}
+              onFeedback={setFeedback}
+              onEdit={
+                onEditMessage
+                  ? () => {
+                      setDraft(message.content);
+                      setEditing(true);
+                    }
+                  : undefined
+              }
+              onFork={onForkFromMessage ? () => onForkFromMessage(message.id) : undefined}
+            />
+          )}
         </div>
       </article>
     );
@@ -142,6 +225,7 @@ export function MessageBubble({
         onSpeak={toggleSpeech}
         onFeedback={setFeedback}
         onRetry={onRetry}
+        onFork={onForkFromMessage ? () => onForkFromMessage(message.id) : undefined}
       />
     </article>
   );
@@ -157,6 +241,8 @@ function MessageActions({
   onSpeak,
   onFeedback,
   onRetry,
+  onEdit,
+  onFork,
 }: {
   align: "left" | "right";
   timestamp?: string;
@@ -167,6 +253,8 @@ function MessageActions({
   onSpeak: () => void;
   onFeedback: (feedback: Feedback) => void;
   onRetry?: () => void;
+  onEdit?: () => void;
+  onFork?: () => void;
 }) {
   return (
     <div
@@ -195,6 +283,16 @@ function MessageActions({
       >
         <ThumbsDown size={15} aria-hidden="true" />
       </ActionButton>
+      {onEdit ? (
+        <ActionButton label="Edit" onClick={onEdit}>
+          <Pencil size={15} aria-hidden="true" />
+        </ActionButton>
+      ) : null}
+      {onFork ? (
+        <ActionButton label="Fork" onClick={onFork}>
+          <GitBranch size={15} aria-hidden="true" />
+        </ActionButton>
+      ) : null}
       {onRetry ? (
         <ActionButton label="Retry" onClick={onRetry}>
           <RotateCcw size={15} aria-hidden="true" />

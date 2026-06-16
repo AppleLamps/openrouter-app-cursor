@@ -24,6 +24,11 @@ import {
 } from "lucide-react";
 import type { ChatThread } from "@/lib/types";
 
+type FilteredThread = {
+  thread: ChatThread;
+  matchInMessages: boolean;
+};
+
 type ChatSidebarProps = {
   threads: ChatThread[];
   activeThreadId: string;
@@ -64,15 +69,28 @@ export function ChatSidebar({
     () => [...threads].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)),
     [threads],
   );
-  const filteredThreads = useMemo(() => {
+  const filteredThreads = useMemo((): FilteredThread[] => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) {
-      return sortedThreads;
+      return sortedThreads.map((thread) => ({ thread, matchInMessages: false }));
     }
 
-    return sortedThreads.filter((thread) => thread.title.toLowerCase().includes(normalizedQuery));
+    return sortedThreads
+      .filter((thread) => {
+        if (thread.title.toLowerCase().includes(normalizedQuery)) {
+          return true;
+        }
+
+        return thread.messages.some((message) => message.content.toLowerCase().includes(normalizedQuery));
+      })
+      .map((thread) => ({
+        thread,
+        matchInMessages:
+          !thread.title.toLowerCase().includes(normalizedQuery) &&
+          thread.messages.some((message) => message.content.toLowerCase().includes(normalizedQuery)),
+      }));
   }, [query, sortedThreads]);
-  const starredThreads = filteredThreads.filter((thread) => thread.starred);
+  const starredThreads = filteredThreads.filter(({ thread }) => thread.starred);
 
   return (
     <>
@@ -184,6 +202,7 @@ export function ChatSidebar({
                 onRenameThread={onRenameThread}
                 onDeleteThread={onDeleteThread}
                 onToggleStarred={onToggleStarred}
+                showMessageMatches={query.trim().length > 0}
               />
               <ThreadSection
                 label="Recents"
@@ -194,6 +213,7 @@ export function ChatSidebar({
                 onRenameThread={onRenameThread}
                 onDeleteThread={onDeleteThread}
                 onToggleStarred={onToggleStarred}
+                showMessageMatches={query.trim().length > 0}
               />
             </div>
           </div>
@@ -305,15 +325,17 @@ function ThreadSection({
   onRenameThread,
   onDeleteThread,
   onToggleStarred,
+  showMessageMatches,
 }: {
   label: string;
   emptyLabel: string;
-  threads: ChatThread[];
+  threads: FilteredThread[];
   activeThreadId: string;
   onSelectThread: (threadId: string) => void;
   onRenameThread: (threadId: string, title: string) => void;
   onDeleteThread: (threadId: string) => void;
   onToggleStarred: (threadId: string) => void;
+  showMessageMatches: boolean;
 }) {
   return (
     <section className="mb-5">
@@ -322,11 +344,12 @@ function ThreadSection({
         {threads.length === 0 ? (
           <p className="px-2 py-1 text-xs text-(--muted)">{emptyLabel}</p>
         ) : (
-          threads.map((thread) => (
+          threads.map(({ thread, matchInMessages }) => (
             <ThreadRow
               key={`${label}-${thread.id}`}
               thread={thread}
               active={thread.id === activeThreadId}
+              matchInMessages={showMessageMatches && matchInMessages}
               onSelect={() => onSelectThread(thread.id)}
               onRename={(title) => onRenameThread(thread.id, title)}
               onDelete={() => onDeleteThread(thread.id)}
@@ -342,6 +365,7 @@ function ThreadSection({
 function ThreadRow({
   thread,
   active,
+  matchInMessages = false,
   onSelect,
   onRename,
   onDelete,
@@ -349,6 +373,7 @@ function ThreadRow({
 }: {
   thread: ChatThread;
   active: boolean;
+  matchInMessages?: boolean;
   onSelect: () => void;
   onRename: (title: string) => void;
   onDelete: () => void;
@@ -410,6 +435,11 @@ function ThreadRow({
       ) : (
         <button type="button" onClick={onSelect} className="flex h-9 w-full items-center gap-2 px-2 pr-9 text-left">
           <span className="min-w-0 flex-1 truncate text-sm text-(--foreground)">{thread.title}</span>
+          {matchInMessages ? (
+            <span className="shrink-0 text-(--muted)" title="Match in messages" aria-label="Match in messages">
+              <MessageCircle size={13} aria-hidden="true" />
+            </span>
+          ) : null}
         </button>
       )}
 

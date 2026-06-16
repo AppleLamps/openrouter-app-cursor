@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
   Check,
   ChevronDown,
   Database,
+  Download,
   FileText,
   Globe2,
   Image as ImageIcon,
@@ -15,6 +16,7 @@ import {
   RotateCcw,
   Search,
   Trash2,
+  Upload,
 } from "lucide-react";
 import {
   DEFAULT_MESSAGE_TRANSFORMS,
@@ -652,11 +654,22 @@ export function ToolsSettingsSection({
 export function DataSettingsSection({
   onClearChat,
   onResetSettings,
+  onExportAllThreads,
+  onExportCurrentThread,
+  onImportThreads,
+  importNotice,
+  canExportCurrentThread,
 }: {
   onClearChat: () => void;
   onResetSettings: () => void;
+  onExportAllThreads: () => void;
+  onExportCurrentThread: () => void;
+  onImportThreads: (file: File) => void;
+  importNotice?: string;
+  canExportCurrentThread: boolean;
 }) {
   const [pendingAction, setPendingAction] = useState<"clear" | "reset" | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   function runAction(action: "clear" | "reset") {
     if (pendingAction !== action) {
@@ -675,6 +688,57 @@ export function DataSettingsSection({
   return (
     <SectionCard title="Data" description="Manage data stored locally in this browser." icon={<Trash2 size={18} aria-hidden="true" />}>
       <div className="space-y-3">
+        <div className="rounded-xl border border-(--border) bg-(--background) p-3">
+          <p className="text-sm font-medium">Backup and restore</p>
+          <p className="mt-1 text-xs leading-5 text-(--muted)">
+            Export chats as JSON or Markdown, or import previously exported JSON threads.
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={onExportAllThreads}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-(--border) px-4 text-sm font-medium text-(--foreground) transition active:scale-[0.98]"
+            >
+              <Download size={16} aria-hidden="true" />
+              Export all threads (JSON)
+            </button>
+            <button
+              type="button"
+              onClick={onExportCurrentThread}
+              disabled={!canExportCurrentThread}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-(--border) px-4 text-sm font-medium text-(--foreground) transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <FileText size={16} aria-hidden="true" />
+              Export current thread (Markdown)
+            </button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) {
+                  onImportThreads(file);
+                }
+                event.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-(--border) px-4 text-sm font-medium text-(--foreground) transition active:scale-[0.98]"
+            >
+              <Upload size={16} aria-hidden="true" />
+              Import threads (JSON)
+            </button>
+            {importNotice ? (
+              <p className="text-xs text-(--accent)" role="status">
+                {importNotice}
+              </p>
+            ) : null}
+          </div>
+        </div>
         <DestructiveAction
           title="Clear current chat"
           description="Removes messages from the active thread only. Other saved chats remain available in the sidebar."

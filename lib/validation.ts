@@ -14,6 +14,7 @@ import {
   type SearchContextSize,
   type SearchEngine,
   type ServerToolSettings,
+  type ChatThread,
 } from "@/lib/types";
 
 export function isChatMessage(value: unknown): value is ChatMessage {
@@ -67,6 +68,27 @@ export function isChatGeneratedFile(value: unknown): value is ChatGeneratedFile 
     file.dataUrl.startsWith("data:") &&
     (file.name === undefined || typeof file.name === "string")
   );
+}
+
+export function isChatThread(value: unknown): value is ChatThread {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const thread = value as Partial<ChatThread>;
+  return (
+    typeof thread.id === "string" &&
+    typeof thread.title === "string" &&
+    Array.isArray(thread.messages) &&
+    thread.messages.every(isChatMessage) &&
+    typeof thread.createdAt === "string" &&
+    typeof thread.updatedAt === "string" &&
+    (thread.starred === undefined || typeof thread.starred === "boolean")
+  );
+}
+
+export function isChatThreadArray(value: unknown): value is ChatThread[] {
+  return Array.isArray(value) && value.every(isChatThread);
 }
 
 export function isChatMessageSource(value: unknown): value is ChatMessageSource {

@@ -28,9 +28,11 @@ import {
   saveThreads,
 } from "@/lib/storage";
 import { createId } from "@/lib/utils";
+import { exportThreadMarkdown, exportThreadsJson, parseThreadsJson } from "@/lib/io";
 import {
   isChatGeneratedFile as isGeneratedFile,
   isChatMessageSource as isMessageSource,
+  isChatThreadArray,
 } from "@/lib/validation";
 
 type ApiErrorResponse = {
@@ -78,12 +80,16 @@ export function Chat() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [noticeText, setNoticeText] = useState("");
+  const [importNotice, setImportNotice] = useState("");
   const [streamingDraft, setStreamingDraft] = useState<StreamingDraft | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isStreamingRef = useRef(false);
   const streamingDraftRef = useRef<StreamingDraft | null>(null);
   const streamingFrameRef = useRef<number | null>(null);
+  const threadsRef = useRef<ChatThread[]>([]);
+  const autoTitleTimeoutRef = useRef<number | null>(null);
+  const scheduleAutoTitleRef = useRef<(threadId: string) => void>(() => {});
 
   const setStreamingActive = useCallback((active: boolean) => {
     isStreamingRef.current = active;
@@ -139,6 +145,16 @@ export function Chat() {
     () => threads.find((thread) => thread.id === activeThreadId) ?? null,
     [activeThreadId, threads],
   );
+
+  threadsRef.current = threads;
+
+  useEffect(() => {
+    return () => {
+      if (autoTitleTimeoutRef.current) {
+        window.clearTimeout(autoTitleTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const messages = activeThread?.messages ?? [];
   const visibleMessages = useMemo(
@@ -338,6 +354,7 @@ export function Chat() {
       const controller = new AbortController();
       abortRef.current = controller;
       let streamedContent = "";
+      let completedSuccessfully = false;
 
       void (async () => {
         try {
@@ -418,6 +435,7 @@ export function Chat() {
             assistantMessage.id,
             streamedContent.trim() ? streamedContent : "No response.",
           );
+          completedSuccessfully = true;
         } catch (error) {
           if (controller.signal.aborted) {
             commitAssistantMessage(
@@ -438,6 +456,9 @@ export function Chat() {
         } finally {
           abortRef.current = null;
           setStreamingActive(false);
+          if (completedSuccessfully) {
+            scheduleAutoTitleRef.current(threadId);
+          }
         }
       })();
 
@@ -477,7 +498,7 @@ export function Chat() {
       );
       const nextTitle = activeThread.messages.some((message) => message.role === "user")
         ? activeThread.title
-        : createTitleFromMessage(content);
+        : "New chat";
 
       return startAssistantRequest({
         threadId: activeThread.id,
@@ -625,6 +646,7 @@ export function Chat() {
         }
       }
 
+      abortRef.current?.abort();
       startAssistantRequest({
         threadId: activeThread.id,
         title: activeThread.title,
@@ -633,6 +655,177 @@ export function Chat() {
     },
     [activeThread, startAssistantRequest],
   );
+
+  const editUserMessage = useCallback(
+    (messageId: string, newContent: string) => {
+      if (!activeThread || isStreamingRef.current) {
+        return;
+      }
+
+      const content = newContent.trim();
+      const messageIndex = activeThread.messages.findIndex((message) => message.id === messageId);
+      if (messageIndex < 0) {
+        setStatusText("Could not find that message to edit.");
+        return;
+      }
+
+      const original = activeThread.messages[messageIndex];
+      if (original.role !== "user") {
+        return;
+      }
+
+      if (!content && (original.attachments?.length ?? 0) === 0) {
+        setStatusText("Enter a message before saving.");
+        return;
+      }
+
+      abortRef.current?.abort();
+      const editedMessage: ChatMessage = {
+        ...original,
+        content,
+      };
+      const requestMessages = activeThread.messages
+        .slice(0, messageIndex + 1)
+        .map((message, index) => (index === messageIndex ? editedMessage : message))
+        .filter((message) => message.role === "user" || message.role === "assistant");
+
+      startAssistantRequest({
+        threadId: activeThread.id,
+        title: activeThread.title,
+        requestMessages,
+      });
+    },
+    [activeThread, startAssistantRequest],
+  );
+
+  const forkFromMessage = useCallback(
+    (messageId: string) => {
+      if (!activeThread) {
+        return;
+      }
+
+      const messageIndex = activeThread.messages.findIndex((message) => message.id === messageId);
+      if (messageIndex < 0) {
+        setStatusText("Could not find that message to fork.");
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const forkedThread: ChatThread = {
+        id: createId(),
+        title: createForkTitle(activeThread.title),
+        messages: activeThread.messages.slice(0, messageIndex + 1),
+        createdAt: now,
+        updatedAt: now,
+        starred: false,
+      };
+
+      setThreads((current) => [forkedThread, ...current]);
+      setActiveThreadId(forkedThread.id);
+      setSidebarOpen(false);
+      setStatusText("");
+    },
+    [activeThread],
+  );
+
+  const scheduleAutoTitle = useCallback(
+    (threadId: string) => {
+      if (autoTitleTimeoutRef.current) {
+        window.clearTimeout(autoTitleTimeoutRef.current);
+      }
+
+      autoTitleTimeoutRef.current = window.setTimeout(() => {
+        autoTitleTimeoutRef.current = null;
+        void (async () => {
+          const thread = threadsRef.current.find((item) => item.id === threadId);
+          if (!thread || !shouldAutoTitle(thread)) {
+            return;
+          }
+
+          const apiKey = settings.apiKey?.trim();
+          if (!apiKey) {
+            return;
+          }
+
+          const userMessages = thread.messages.filter((message) => message.role === "user");
+          const assistantMessages = thread.messages.filter((message) => message.role === "assistant");
+          const firstUser = userMessages[0];
+          const firstAssistant = assistantMessages[0];
+          if (!firstUser || !firstAssistant) {
+            return;
+          }
+
+          try {
+            const response = await fetch("/api/title", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                apiKey,
+                messages: [firstUser, firstAssistant],
+              }),
+            });
+
+            if (!response.ok) {
+              return;
+            }
+
+            const data = (await response.json()) as { title?: string };
+            if (typeof data.title === "string" && data.title.trim()) {
+              renameThread(threadId, data.title.trim());
+            }
+          } catch {
+            // Keep the existing title on any failure.
+          }
+        })();
+      }, 1500);
+    },
+    [renameThread, settings.apiKey],
+  );
+
+  scheduleAutoTitleRef.current = scheduleAutoTitle;
+
+  const exportAllThreads = useCallback(() => {
+    exportThreadsJson(threadsRef.current);
+  }, []);
+
+  const exportCurrentThread = useCallback(() => {
+    const thread = threadsRef.current.find((item) => item.id === activeThreadId);
+    if (!thread || thread.messages.length === 0) {
+      setNoticeText("Nothing to export in this chat.");
+      window.setTimeout(() => setNoticeText(""), 1800);
+      return;
+    }
+
+    exportThreadMarkdown(thread);
+  }, [activeThreadId]);
+
+  const importThreads = useCallback(async (file: File) => {
+    try {
+      const parsed = parseThreadsJson(await file.text());
+      if (!isChatThreadArray(parsed)) {
+        setNoticeText("Could not import threads. File format is invalid.");
+        window.setTimeout(() => setNoticeText(""), 2500);
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const imported = parsed.map((thread) => ({
+        ...thread,
+        id: createId(),
+        starred: false,
+        updatedAt: now,
+      }));
+
+      setThreads((current) => [...imported, ...current]);
+      setImportNotice(`Imported ${imported.length} chat${imported.length === 1 ? "" : "s"}.`);
+      window.setTimeout(() => setImportNotice(""), 3000);
+    } catch {
+      setNoticeText("Could not import threads.");
+      window.setTimeout(() => setNoticeText(""), 2500);
+    }
+  }, []);
 
   return (
     <main className="app-shell flex overflow-hidden">
@@ -732,6 +925,10 @@ export function Chat() {
                     contentOverride={contentOverride}
                     isStreaming={isActiveStream}
                     onRetry={message.role === "assistant" ? () => retryAssistantMessage(message.id) : undefined}
+                    onEditMessage={
+                      message.role === "user" ? (messageId, content) => editUserMessage(messageId, content) : undefined
+                    }
+                    onForkFromMessage={(messageId) => forkFromMessage(messageId)}
                     showThinking={message.role === "assistant" && index === visibleMessages.length - 1 && isStreaming}
                   />
                 );
@@ -774,6 +971,11 @@ export function Chat() {
         onSettingsChange={setSettings}
         onClearChat={clearActiveChat}
         onResetSettings={resetSettings}
+        onExportAllThreads={exportAllThreads}
+        onExportCurrentThread={exportCurrentThread}
+        onImportThreads={importThreads}
+        importNotice={importNotice}
+        canExportCurrentThread={Boolean(activeThread && activeThread.messages.length > 0)}
       />
     </main>
   );
@@ -794,6 +996,28 @@ function createEmptyThread(): ChatThread {
 function createTitleFromMessage(content: string) {
   const compact = content.replace(/\s+/g, " ").trim();
   return compact.length > 42 ? `${compact.slice(0, 39).trim()}...` : compact || "New chat";
+}
+
+function createForkTitle(originalTitle: string) {
+  const candidate = `${originalTitle} (fork)`;
+  return candidate.length > 60 ? `${candidate.slice(0, 57).trim()}...` : candidate;
+}
+
+// Auto-title only when the user has not renamed away from defaults:
+// - title is still "New chat", or
+// - exactly one user and one assistant message and title still matches the first-message heuristic.
+function shouldAutoTitle(thread: ChatThread) {
+  if (thread.title === "New chat") {
+    return true;
+  }
+
+  const userMessages = thread.messages.filter((message) => message.role === "user");
+  const assistantMessages = thread.messages.filter((message) => message.role === "assistant");
+  if (userMessages.length !== 1 || assistantMessages.length !== 1) {
+    return false;
+  }
+
+  return thread.title === createTitleFromMessage(userMessages[0].content);
 }
 
 async function readErrorMessage(response: Response) {
