@@ -19,16 +19,12 @@ Chat uses the OpenRouter API key saved in the app Settings screen. `OPENROUTER_A
 
 ## Settings
 
-- Add, validate, or remove your OpenRouter API key in Settings.
-- Search current OpenRouter models from the Settings model picker. The picker is powered by `GET https://openrouter.ai/api/v1/models` through `app/api/models/route.ts`.
-- Use the selected model field for a custom model id when the search list does not show it.
-- Change the system prompt and temperature in Settings.
-- Keep Auto compression enabled so OpenRouter can compress oversized chat prompts before they hit model context or message-count limits.
-- Enable Response caching when you want identical OpenRouter requests to replay from cache. This beta feature is off by default.
-- Enable OpenRouter server tools for Web Search, Web Fetch, and Datetime. These are off by default; Web Search and Web Fetch are beta OpenRouter features and may add tool/provider costs.
-- Attach images or PDFs from the composer. Enable image generation in Settings only when using an image-output model.
-- Clear chat clears only the active chat thread.
-- Reset settings restores defaults and removes the locally saved key.
+Settings uses a guided four-section layout with mobile-friendly segmented navigation. Advanced tool, multimodal, and caching controls are collapsed by default.
+
+- Setup: add, validate, save, or remove the local OpenRouter API key.
+- Model: search current OpenRouter models, choose or type a custom model id, and edit the system prompt and temperature. Model search is powered by `GET https://openrouter.ai/api/v1/models` through `app/api/models/route.ts`.
+- Tools: enable OpenRouter Web Search, Web Fetch, Datetime, Multimodal image/PDF options, Auto compression, and Response caching. Web Search and Web Fetch are off by default and may add tool/provider costs.
+- Data: clear only the active chat thread or reset settings. Both destructive actions require confirmation.
 
 ## Message Transforms
 
