@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import type { ChatAttachment } from "@/lib/types";
+import { createId, formatBytes } from "@/lib/utils";
 
 type ComposerProps = {
   isStreaming: boolean;
@@ -116,7 +117,7 @@ export function Composer({
 
   return (
     <form
-      className="composer-safe mx-auto flex max-w-3xl flex-col gap-2"
+      className="composer-safe mx-auto flex max-w-188 flex-col gap-2"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -137,12 +138,12 @@ export function Composer({
       ) : null}
 
       {attachmentError ? (
-        <p className="text-xs text-[color:var(--danger)]" role="status">
+        <p className="text-xs text-(--danger)" role="status">
           {attachmentError}
         </p>
       ) : null}
 
-      <div className="rounded-2xl border border-[color:var(--border-strong)] bg-[color:var(--surface)] p-3 shadow-[0_10px_28px_rgba(80,67,52,0.08)]">
+      <div className="rounded-[1.1rem] border border-(--border-strong) bg-(--surface-raised) p-3 shadow-[0_8px_24px_rgba(31,31,30,0.07)]">
         <input
           ref={fileInputRef}
           type="file"
@@ -158,7 +159,7 @@ export function Composer({
             value={value}
             rows={1}
             disabled={disabled}
-            placeholder="Write your prompt..."
+            placeholder="Write a message..."
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -166,7 +167,7 @@ export function Composer({
                 submit();
               }
             }}
-            className="block max-h-40 min-h-10 w-full resize-none bg-transparent text-base leading-6 text-[color:var(--foreground)] outline-none placeholder:text-[color:var(--muted)] disabled:opacity-60"
+            className="block max-h-40 min-h-10 w-full resize-none bg-transparent text-base leading-6 text-(--foreground) outline-none placeholder:text-(--muted) disabled:opacity-60"
           />
         </label>
 
@@ -177,7 +178,7 @@ export function Composer({
             aria-label="Attach image or PDF"
             disabled={disabled || isStreaming || attachments.length >= MAX_ATTACHMENTS}
             onClick={() => fileInputRef.current?.click()}
-            className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--foreground)] transition hover:bg-[color:var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-45"
+            className="grid h-9 w-9 place-items-center rounded-md text-(--foreground) transition hover:bg-(--surface-muted) disabled:cursor-not-allowed disabled:opacity-45"
           >
             <Paperclip size={18} aria-hidden="true" />
           </button>
@@ -186,7 +187,7 @@ export function Composer({
             <button
               type="button"
               onClick={onOpenSettings}
-              className="hidden min-w-0 items-center gap-1 rounded-full px-2 py-1.5 text-sm text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)] sm:inline-flex"
+              className="hidden min-w-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm text-(--muted) hover:bg-(--surface-muted) sm:inline-flex"
             >
               <span className="truncate">{formatModelLabel(model)}</span>
               <SlidersHorizontal size={14} aria-hidden="true" />
@@ -196,7 +197,7 @@ export function Composer({
               title="Settings"
               aria-label="Settings"
               onClick={onOpenSettings}
-              className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)]"
+              className="grid h-9 w-9 place-items-center rounded-md text-(--muted) hover:bg-(--surface-muted)"
             >
               <Settings2 size={17} aria-hidden="true" />
             </button>
@@ -205,7 +206,7 @@ export function Composer({
               title="Voice input"
               aria-label="Voice input"
               onClick={onVoice}
-              className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)]"
+              className="grid h-9 w-9 place-items-center rounded-md text-(--muted) hover:bg-(--surface-muted)"
             >
               <Mic size={17} aria-hidden="true" />
             </button>
@@ -215,7 +216,7 @@ export function Composer({
                 title="Stop generating"
                 aria-label="Stop generating"
                 onClick={onStop}
-                className="grid h-9 w-9 place-items-center rounded-full bg-[color:var(--danger)] text-white transition active:scale-95"
+                className="grid h-9 w-9 place-items-center rounded-md bg-(--danger) text-white transition active:scale-95"
               >
                 <Square size={15} fill="currentColor" aria-hidden="true" />
               </button>
@@ -225,7 +226,7 @@ export function Composer({
                 title="Send"
                 aria-label="Send"
                 disabled={disabled || (!value.trim() && attachments.length === 0)}
-                className="grid h-9 w-9 place-items-center rounded-full bg-[color:var(--foreground)] text-[color:var(--background)] transition active:scale-95 disabled:cursor-not-allowed disabled:bg-[color:var(--surface-muted)] disabled:text-[color:var(--muted)]"
+                className="grid h-9 w-9 place-items-center rounded-md bg-(--foreground) text-(--background) transition active:scale-95 disabled:cursor-not-allowed disabled:bg-(--surface-muted) disabled:text-(--muted)"
               >
                 <Send size={17} aria-hidden="true" />
               </button>
@@ -234,8 +235,8 @@ export function Composer({
         </div>
       </div>
 
-      <p className="text-center text-xs text-[color:var(--muted)]">
-        AI can make mistakes. Please double-check responses.
+      <p className="text-center text-xs text-(--muted)">
+        AI can make mistakes. Please double-check important details.
       </p>
     </form>
   );
@@ -254,7 +255,7 @@ function AttachmentPreview({
   onRemove: () => void;
 }) {
   return (
-    <div className="relative flex h-20 min-w-40 max-w-56 items-center gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] p-2">
+    <div className="relative flex h-20 min-w-40 max-w-56 items-center gap-2 rounded-lg border border-(--border) bg-(--surface) p-2">
       {attachment.kind === "image" ? (
         <img
           src={attachment.dataUrl}
@@ -262,18 +263,18 @@ function AttachmentPreview({
           className="h-14 w-14 shrink-0 rounded-lg object-cover"
         />
       ) : (
-        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-[color:var(--surface-muted)] text-[color:var(--accent)]">
+        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-lg bg-(--surface-muted) text-(--accent)">
           <FileText size={20} aria-hidden="true" />
         </div>
       )}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
           {attachment.kind === "image" ? (
-            <ImageIcon size={13} className="shrink-0 text-[color:var(--muted)]" aria-hidden="true" />
+            <ImageIcon size={13} className="shrink-0 text-(--muted)" aria-hidden="true" />
           ) : null}
           <p className="truncate text-xs font-medium">{attachment.name}</p>
         </div>
-        <p className="mt-1 text-xs text-[color:var(--muted)]">{formatBytes(attachment.size)}</p>
+        <p className="mt-1 text-xs text-(--muted)">{formatBytes(attachment.size)}</p>
       </div>
       <button
         type="button"
@@ -295,20 +296,4 @@ function readAsDataUrl(file: File) {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
-}
-
-function createId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

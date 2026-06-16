@@ -4,59 +4,152 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeSanitize from "rehype-sanitize";
+import type { BundledLanguage, Highlighter } from "shiki";
+
+const ALLOWED_LINK_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
+const ALLOWED_MEDIA_PROTOCOLS = new Set(["http:", "https:"]);
 
 type MarkdownMessageProps = {
   content: string;
+  deferRichBlocks?: boolean;
 };
 
-export function MarkdownMessage({ content }: MarkdownMessageProps) {
+let shikiHighlighterPromise: Promise<Highlighter> | null = null;
+let mermaidModulePromise: Promise<typeof import("mermaid").default> | null = null;
+let mermaidInitialized = false;
+let vegaEmbedPromise: Promise<typeof import("vega-embed").default> | null = null;
+
+async function getShikiHighlighter() {
+  shikiHighlighterPromise ??= import("shiki").then(({ createHighlighter }) =>
+    createHighlighter({
+      themes: ["github-light"],
+      langs: ["text"],
+    }),
+  );
+
+  return shikiHighlighterPromise;
+}
+
+async function highlightCode(code: string, language: string) {
+  const { bundledLanguages } = await import("shiki");
+  const requestedLanguage = language || "text";
+  const safeLanguage = requestedLanguage in bundledLanguages ? requestedLanguage : "text";
+  const highlighter = await getShikiHighlighter();
+
+  if (!highlighter.getLoadedLanguages().includes(safeLanguage)) {
+    await highlighter.loadLanguage(safeLanguage as BundledLanguage);
+  }
+
+  return highlighter.codeToHtml(code, {
+    lang: safeLanguage,
+    theme: "github-light",
+  });
+}
+
+async function getMermaid() {
+  mermaidModulePromise ??= import("mermaid").then(({ default: mermaid }) => {
+    if (!mermaidInitialized) {
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: "base",
+        themeVariables: {
+          background: "#fbfaf7",
+          primaryColor: "#f8f5ef",
+          primaryTextColor: "#26221c",
+          primaryBorderColor: "#d96c42",
+          lineColor: "#736d64",
+          secondaryColor: "#efeee9",
+          tertiaryColor: "#ffffff",
+        },
+      });
+      mermaid.setParseErrorHandler(() => undefined);
+      mermaidInitialized = true;
+    }
+
+    return mermaid;
+  });
+
+  return mermaidModulePromise;
+}
+
+async function getVegaEmbed() {
+  vegaEmbedPromise ??= import("vega-embed").then(({ default: embed }) => embed);
+  return vegaEmbedPromise;
+}
+
+export function MarkdownMessage({ content, deferRichBlocks = false }: MarkdownMessageProps) {
   return (
-    <div className="min-w-0 break-words">
+    <div className="min-w-0 wrap-break-word">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeSanitize]}
         components={{
           h1: ({ children }) => <h1>{children}</h1>,
           h2: ({ children }) => <h2>{children}</h2>,
           h3: ({ children }) => <h3>{children}</h3>,
           p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
-          a: ({ children, href }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[color:var(--accent)] underline decoration-[color:var(--accent)]/50 underline-offset-4"
-            >
-              {children}
-            </a>
-          ),
+          a: ({ children, href }) => {
+            const safeHref = sanitizeHref(href);
+            if (!safeHref) {
+              return <span className="text-(--accent)">{children}</span>;
+            }
+
+            return (
+              <a
+                href={safeHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-(--accent) underline decoration-(--accent)/50 underline-offset-4"
+              >
+                {children}
+              </a>
+            );
+          },
+          img: ({ src, alt }) => {
+            const safeSrc = sanitizeMediaSrc(typeof src === "string" ? src : undefined);
+            if (!safeSrc) {
+              return null;
+            }
+
+            return (
+              <img
+                src={safeSrc}
+                alt={alt ?? ""}
+                className="my-3 max-w-full rounded-lg border border-(--border)"
+                loading="lazy"
+              />
+            );
+          },
           ul: ({ children }) => <ul className="mb-4 list-disc space-y-1.5 pl-5 last:mb-0">{children}</ul>,
           ol: ({ children }) => <ol className="mb-4 list-decimal space-y-1.5 pl-5 last:mb-0">{children}</ol>,
           li: ({ children }) => <li className="pl-1.5">{children}</li>,
           blockquote: ({ children }) => (
-            <blockquote className="mb-3 border-l-2 border-[color:var(--accent)]/60 pl-3 text-[color:var(--muted)] last:mb-0">
+            <blockquote className="mb-3 border-l-2 border-(--accent)/60 pl-3 text-(--muted) last:mb-0">
               {children}
             </blockquote>
           ),
-          hr: () => <hr className="my-4 border-[color:var(--border)]" />,
+          hr: () => <hr className="my-4 border-(--border)" />,
           table: ({ children }) => (
-            <div className="mb-3 overflow-x-auto rounded-lg border border-[color:var(--border)] last:mb-0">
+            <div className="mb-3 overflow-x-auto rounded-lg border border-(--border) last:mb-0">
               <table className="w-full min-w-96 border-collapse text-left text-sm">{children}</table>
             </div>
           ),
           th: ({ children }) => (
-            <th className="border-b border-[color:var(--border)] bg-[color:var(--surface-muted)] px-3 py-2 font-medium">
+            <th className="border-b border-(--border) bg-(--surface-muted) px-3 py-2 font-medium">
               {children}
             </th>
           ),
-          td: ({ children }) => <td className="border-b border-[color:var(--border)] px-3 py-2">{children}</td>,
-          pre: ({ children }) => <RichBlock>{children}</RichBlock>,
+          td: ({ children }) => <td className="border-b border-(--border) px-3 py-2">{children}</td>,
+          pre: ({ children }) => <RichBlock deferRichBlocks={deferRichBlocks}>{children}</RichBlock>,
           code: ({ className, children }) => {
             if (className?.startsWith("language-")) {
               return <code className={className}>{children}</code>;
             }
 
             return (
-              <code className="rounded-md bg-[color:var(--surface-muted)] px-1.5 py-0.5 font-sans text-[0.88em] text-[color:var(--accent)]">
+              <code className="rounded-md bg-(--surface-muted) px-1.5 py-0.5 font-sans text-[0.88em] text-(--accent)">
                 {children}
               </code>
             );
@@ -69,9 +162,19 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
   );
 }
 
-function RichBlock({ children }: { children: React.ReactNode }) {
+function RichBlock({
+  children,
+  deferRichBlocks = false,
+}: {
+  children: React.ReactNode;
+  deferRichBlocks?: boolean;
+}) {
   const code = useMemo(() => extractText(children).replace(/\n$/, ""), [children]);
   const language = useMemo(() => extractLanguage(children).toLowerCase(), [children]);
+
+  if (deferRichBlocks) {
+    return <PlainCodeBlock code={code} language={language} />;
+  }
 
   if (language === "mermaid") {
     return <MermaidBlock code={code} />;
@@ -98,22 +201,7 @@ function MermaidBlock({ code }: { code: string }) {
       setSvg("");
 
       try {
-        const mermaid = (await import("mermaid")).default;
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: "strict",
-          theme: "base",
-          themeVariables: {
-            background: "#fbfaf7",
-            primaryColor: "#f8f5ef",
-            primaryTextColor: "#26221c",
-            primaryBorderColor: "#d96c42",
-            lineColor: "#736d64",
-            secondaryColor: "#efeee9",
-            tertiaryColor: "#ffffff",
-          },
-        });
-        mermaid.setParseErrorHandler(() => undefined);
+        const mermaid = await getMermaid();
         await mermaid.parse(code);
 
         const result = await mermaid.render(renderId, code);
@@ -144,6 +232,7 @@ function MermaidBlock({ code }: { code: string }) {
         svg ? (
           <div
             className="rich-render rich-render-mermaid"
+            // Safe: Mermaid strict mode sanitizes SVG output (no scripts or HTML labels).
             dangerouslySetInnerHTML={{ __html: svg }}
           />
         ) : null
@@ -167,7 +256,7 @@ function ChartBlock({ code, language }: { code: string; language: string }) {
 
       try {
         const spec = parseChartSpec(code);
-        const { default: embed } = await import("vega-embed");
+        const embed = await getVegaEmbed();
 
         if (!containerRef.current || cancelled) {
           return;
@@ -219,18 +308,12 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   useEffect(() => {
     let cancelled = false;
 
-    async function highlightCode() {
+    async function runHighlight() {
       setHighlightError("");
       setHighlightedHtml("");
 
       try {
-        const { bundledLanguages, codeToHtml } = await import("shiki");
-        const requestedLanguage = language || "text";
-        const safeLanguage = requestedLanguage in bundledLanguages ? requestedLanguage : "text";
-        const html = await codeToHtml(code, {
-          lang: safeLanguage,
-          theme: "github-light",
-        });
+        const html = await highlightCode(code, language);
 
         if (!cancelled) {
           setHighlightedHtml(html);
@@ -242,7 +325,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
       }
     }
 
-    void highlightCode();
+    void runHighlight();
 
     return () => {
       cancelled = true;
@@ -260,19 +343,43 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   }
 
   return (
-    <div className="mb-3 overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] font-sans last:mb-0">
+    <div className="mb-3 overflow-hidden rounded-xl border border-(--border) bg-(--surface) font-sans last:mb-0">
       <BlockHeader label={language || "code"} copied={copied} onCopy={copyCode} />
       {highlightError ? <RenderError message={highlightError} /> : null}
       {highlightedHtml ? (
         <div
           className="rich-code scroll-area overflow-x-auto"
+          // Safe: Shiki escapes source text into HTML spans; language is whitelisted.
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       ) : (
-        <pre className="scroll-area overflow-x-auto p-3 text-[0.84rem] leading-5 text-[color:var(--foreground)]">
+        <pre className="scroll-area overflow-x-auto p-3 text-[0.84rem] leading-5 text-(--foreground)">
           <code>{code}</code>
         </pre>
       )}
+    </div>
+  );
+}
+
+function PlainCodeBlock({ code, language }: { code: string; language: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <div className="mb-3 overflow-hidden rounded-xl border border-(--border) bg-(--surface) font-sans last:mb-0">
+      <BlockHeader label={language || "code"} copied={copied} onCopy={copyCode} />
+      <pre className="scroll-area overflow-x-auto p-3 text-[0.84rem] leading-5 text-(--foreground)">
+        <code>{code}</code>
+      </pre>
     </div>
   );
 }
@@ -303,17 +410,23 @@ function RenderedPanel({
   }
 
   return (
-    <div className="mb-3 overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] font-sans last:mb-0">
+    <div className="mb-3 overflow-hidden rounded-xl border border-(--border) bg-(--surface) font-sans last:mb-0">
       <BlockHeader label={label} copied={copied} onCopy={copyCode} />
       {error ? <RenderError message={error} /> : null}
-      {loading ? (
-        <div className="flex min-h-28 items-center justify-center px-3 py-6 text-sm text-[color:var(--muted)]">
-          Rendering {label}...
-        </div>
-      ) : null}
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        className={
+          loading
+            ? "flex min-h-28 items-center justify-center px-3 py-6 text-sm text-(--muted)"
+            : "sr-only"
+        }
+      >
+        {loading ? `Rendering ${label}...` : error ? "" : `${label} rendered.`}
+      </div>
       <div className={error ? "hidden" : undefined}>{body}</div>
       {error ? (
-        <pre className="scroll-area max-h-64 overflow-auto border-t border-[color:var(--border)] p-3 text-[0.8rem] leading-5 text-[color:var(--foreground)]">
+        <pre className="scroll-area max-h-64 overflow-auto border-t border-(--border) p-3 text-[0.8rem] leading-5 text-(--foreground)">
           <code>{code}</code>
         </pre>
       ) : null}
@@ -331,14 +444,14 @@ function BlockHeader({
   onCopy: () => void;
 }) {
   return (
-    <div className="flex min-h-10 items-center justify-between gap-3 border-b border-[color:var(--border)] px-3">
-      <span className="truncate text-xs text-[color:var(--muted)]">{label}</span>
+    <div className="flex min-h-10 items-center justify-between gap-3 border-b border-(--border) px-3">
+      <span className="truncate text-xs text-(--muted)">{label}</span>
       <button
         type="button"
         title="Copy source"
         aria-label="Copy source"
         onClick={onCopy}
-        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-[color:var(--muted)] transition active:scale-95"
+        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-(--muted) transition active:scale-95"
       >
         {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
       </button>
@@ -348,7 +461,11 @@ function BlockHeader({
 
 function RenderError({ message }: { message: string }) {
   return (
-    <div className="border-b border-[color:var(--border)] bg-[color:var(--danger)]/10 px-3 py-2 text-xs leading-5 text-[color:var(--danger)]">
+    <div
+      role="status"
+      aria-live="polite"
+      className="border-b border-(--border) bg-(--danger)/10 px-3 py-2 text-xs leading-5 text-(--danger)"
+    >
       {message}
     </div>
   );
@@ -393,6 +510,66 @@ function hasExternalDataUrl(value: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function sanitizeHref(href: string | undefined): string | undefined {
+  if (!href) {
+    return undefined;
+  }
+
+  const trimmed = href.trim();
+  if (!trimmed || trimmed.startsWith("//")) {
+    return undefined;
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith("javascript:") || lower.startsWith("data:") || lower.startsWith("vbscript:")) {
+    return undefined;
+  }
+
+  if (trimmed.startsWith("#") || trimmed.startsWith("/") || trimmed.startsWith(".")) {
+    return trimmed;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (ALLOWED_LINK_PROTOCOLS.has(url.protocol)) {
+      return trimmed;
+    }
+  } catch {
+    if (!/^[a-zA-Z][\w+.-]*:/.test(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
+}
+
+function sanitizeMediaSrc(src: string | undefined): string | undefined {
+  if (!src) {
+    return undefined;
+  }
+
+  const trimmed = src.trim();
+  if (!trimmed || trimmed.startsWith("//")) {
+    return undefined;
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith("javascript:") || lower.startsWith("vbscript:")) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (ALLOWED_MEDIA_PROTOCOLS.has(url.protocol)) {
+      return trimmed;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
 }
 
 function formatRenderError(caught: unknown, fallback: string): string {

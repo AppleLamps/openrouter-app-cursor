@@ -11,6 +11,9 @@ const ALLOWED_SORTS = new Set([
   "newest",
 ]);
 
+const MODELS_CACHE_TTL_MS = 60_000;
+const modelsCache = new Map<string, { expiresAt: number; payload: { data: OpenRouterModel[] } }>();
+
 type OpenRouterModelResponse = {
   data?: unknown;
 };
@@ -55,12 +58,18 @@ export async function GET(req: Request) {
     openRouterUrl.searchParams.set("sort", sort);
   }
 
+  const cacheKey = openRouterUrl.toString();
+  const cached = modelsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return Response.json(cached.payload);
+  }
+
   try {
     const response = await fetch(openRouterUrl, {
       headers: {
         Accept: "application/json",
       },
-      cache: "no-store",
+      next: { revalidate: 60 },
     });
 
     if (!response.ok) {
@@ -78,10 +87,16 @@ export async function GET(req: Request) {
     const payload = (await response.json()) as OpenRouterModelResponse;
     const rawModels = Array.isArray(payload.data) ? payload.data : [];
     const models = rawModels.map(toModel).filter((model): model is OpenRouterModel => Boolean(model));
-
-    return Response.json({
+    const responsePayload = {
       data: models.slice(0, 40),
+    };
+
+    modelsCache.set(cacheKey, {
+      expiresAt: Date.now() + MODELS_CACHE_TTL_MS,
+      payload: responsePayload,
     });
+
+    return Response.json(responsePayload);
   } catch {
     return Response.json(
       {

@@ -78,17 +78,17 @@ export function SetupSettingsSection({
 
   return (
     <SectionCard title="API key" description="Save your OpenRouter key locally on this device. It is sent only to local route handlers." icon={<KeyRound size={18} aria-hidden="true" />}>
-      <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2">
+      <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-(--border) bg-(--background) px-3 py-2">
         <div className="min-w-0">
           <p className="text-sm font-medium">Current status</p>
-          <p className="truncate text-xs text-[color:var(--muted)]">{savedKeyLabel || apiStatusLabel(apiStatus)}</p>
+          <p className="truncate text-xs text-(--muted)">{savedKeyLabel || apiStatusLabel(apiStatus)}</p>
         </div>
         <button
           type="button"
           title="Validate API key"
           aria-label="Validate API key"
           onClick={() => onValidateApiKey()}
-          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-full bg-[color:var(--surface-muted)] text-[color:var(--foreground)] transition active:scale-95"
+          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-full bg-(--surface-muted) text-(--foreground) transition active:scale-95"
         >
           <RefreshCw size={17} aria-hidden="true" />
         </button>
@@ -97,8 +97,8 @@ export function SetupSettingsSection({
       <div className="flex flex-col gap-2 sm:flex-row">
         <label className="min-w-0 flex-1">
           <span className="sr-only">OpenRouter API key</span>
-          <div className="flex min-h-12 items-center gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3">
-            <KeyRound size={17} className="shrink-0 text-[color:var(--muted)]" aria-hidden="true" />
+          <div className="flex min-h-12 items-center gap-2 rounded-xl border border-(--border) bg-(--background) px-3">
+            <KeyRound size={17} className="shrink-0 text-(--muted)" aria-hidden="true" />
             <input
               value={draftApiKey}
               type="password"
@@ -107,14 +107,14 @@ export function SetupSettingsSection({
               autoCorrect="off"
               placeholder="sk-or-..."
               onChange={(event) => setDraftApiKey(event.target.value)}
-              className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-[color:var(--muted)]"
+              className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-(--muted)"
             />
           </div>
         </label>
         <button
           type="button"
           onClick={saveApiKey}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[color:var(--accent-strong)] px-4 text-sm font-medium text-[color:var(--background)] transition active:scale-[0.98]"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-(--accent-strong) px-4 text-sm font-medium text-(--background) transition active:scale-[0.98]"
         >
           <Check size={17} aria-hidden="true" />
           Save
@@ -122,7 +122,7 @@ export function SetupSettingsSection({
         <button
           type="button"
           onClick={removeApiKey}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[color:var(--border)] px-4 text-sm font-medium text-[color:var(--foreground)] transition active:scale-[0.98]"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-(--border) px-4 text-sm font-medium text-(--foreground) transition active:scale-[0.98]"
         >
           <Trash2 size={17} aria-hidden="true" />
           Remove
@@ -200,8 +200,8 @@ export function ModelSettingsSection({
       <SectionCard title="Model picker" description="Search current OpenRouter models or type a custom model id." icon={<Search size={18} aria-hidden="true" />}>
         <div className="mb-3">
           <label className="mb-2 block text-sm font-medium">Model search</label>
-          <div className="flex min-h-12 items-center gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3">
-            <Search size={17} className="shrink-0 text-[color:var(--muted)]" aria-hidden="true" />
+          <div className="flex min-h-12 items-center gap-2 rounded-xl border border-(--border) bg-(--background) px-3">
+            <Search size={17} className="shrink-0 text-(--muted)" aria-hidden="true" />
             <input
               value={modelQuery}
               spellCheck={false}
@@ -209,7 +209,7 @@ export function ModelSettingsSection({
               autoCorrect="off"
               placeholder="Search OpenRouter models"
               onChange={(event) => setModelQuery(event.target.value)}
-              className="min-w-0 flex-1 bg-transparent text-base text-[color:var(--foreground)] outline-none placeholder:text-[color:var(--muted)]"
+              className="min-w-0 flex-1 bg-transparent text-base text-(--foreground) outline-none placeholder:text-(--muted)"
             />
           </div>
         </div>
@@ -227,17 +227,17 @@ export function ModelSettingsSection({
                 model: event.target.value,
               })
             }
-            className="min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 text-base text-[color:var(--foreground)]"
+            className="min-h-12 w-full rounded-xl border border-(--border) bg-(--background) px-3 text-base text-(--foreground)"
           />
         </label>
 
-        <div className="scroll-area max-h-72 space-y-2 overflow-y-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] p-2">
+        <div className="scroll-area max-h-72 space-y-2 overflow-y-auto rounded-xl border border-(--border) bg-(--background) p-2">
           {modelsLoading ? (
-            <p className="px-2 py-5 text-center text-sm text-[color:var(--muted)]">Loading models...</p>
+            <p className="px-2 py-5 text-center text-sm text-(--muted)">Loading models...</p>
           ) : modelsError ? (
-            <p className="px-2 py-5 text-center text-sm text-[color:var(--muted)]">{modelsError}</p>
+            <p className="px-2 py-5 text-center text-sm text-(--muted)">{modelsError}</p>
           ) : models.length === 0 ? (
-            <p className="px-2 py-5 text-center text-sm text-[color:var(--muted)]">No models found.</p>
+            <p className="px-2 py-5 text-center text-sm text-(--muted)">No models found.</p>
           ) : (
             models.map((model) => (
               <button
@@ -252,8 +252,8 @@ export function ModelSettingsSection({
                 }}
                 className={`block min-h-16 w-full rounded-lg px-3 py-2 text-left transition active:scale-[0.99] ${
                   settings.model === model.id
-                    ? "bg-[color:var(--accent-strong)] text-[color:var(--background)]"
-                    : "bg-[color:var(--surface-raised)] text-[color:var(--foreground)]"
+                    ? "bg-(--accent-strong) text-(--background)"
+                    : "bg-(--surface-raised) text-(--foreground)"
                 }`}
               >
                 <span className="block truncate text-sm font-medium">{model.name}</span>
@@ -279,14 +279,14 @@ export function ModelSettingsSection({
                 systemPrompt: event.target.value,
               })
             }
-            className="min-h-28 w-full resize-y rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-3 text-base leading-6 text-[color:var(--foreground)]"
+            className="min-h-28 w-full resize-y rounded-xl border border-(--border) bg-(--background) px-3 py-3 text-base leading-6 text-(--foreground)"
           />
         </label>
 
         <label className="block">
           <span className="mb-2 flex items-center justify-between gap-3 text-sm font-medium">
             <span>Temperature</span>
-            <span className="text-[color:var(--muted)]">{settings.temperature.toFixed(1)}</span>
+            <span className="text-(--muted)">{settings.temperature.toFixed(1)}</span>
           </span>
           <input
             type="range"
@@ -300,7 +300,7 @@ export function ModelSettingsSection({
                 temperature: Number(event.target.value),
               })
             }
-            className="h-11 w-full accent-[color:var(--accent-strong)]"
+            className="h-11 w-full accent-(--accent-strong)"
           />
         </label>
       </SectionCard>
@@ -441,7 +441,7 @@ export function ToolsSettingsSection({
         </DisclosureButton>
 
         {webToolsAdvancedOpen ? (
-          <div className="mt-3 space-y-4 border-t border-[color:var(--border)] pt-3">
+          <div className="mt-3 space-y-4 border-t border-(--border) pt-3">
             <div>
               <p className="mb-2 text-sm font-medium">Web Search</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -483,7 +483,7 @@ export function ToolsSettingsSection({
                 onChange={(domains) => updateWebSearch({ excludedDomains: domains })}
               />
               {serverTools.webSearch.allowedDomains.length > 0 && serverTools.webSearch.excludedDomains.length > 0 ? (
-                <p className="mt-2 text-xs leading-5 text-[color:var(--muted)]">
+                <p className="mt-2 text-xs leading-5 text-(--muted)">
                   Some search engines treat allowed and excluded domains as mutually exclusive; allowed domains take precedence where required.
                 </p>
               ) : null}
@@ -537,7 +537,7 @@ export function ToolsSettingsSection({
                 autoCorrect="off"
                 placeholder="America/New_York"
                 onChange={(event) => updateDatetime({ timezone: event.target.value })}
-                className="min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 text-base text-[color:var(--foreground)]"
+                className="min-h-12 w-full rounded-xl border border-(--border) bg-(--background) px-3 text-base text-(--foreground)"
               />
             </label>
           </div>
@@ -561,7 +561,7 @@ export function ToolsSettingsSection({
         </DisclosureButton>
 
         {multimodalAdvancedOpen ? (
-          <div className="mt-3 space-y-4 border-t border-[color:var(--border)] pt-3">
+          <div className="mt-3 space-y-4 border-t border-(--border) pt-3">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <SelectField
                 label="Image output mode"
@@ -585,7 +585,7 @@ export function ToolsSettingsSection({
               <select
                 value={multimodal.pdfEngine}
                 onChange={(event) => updatePdfEngine(event.target.value as ChatSettings["multimodal"]["pdfEngine"])}
-                className="min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 text-base text-[color:var(--foreground)]"
+                className="min-h-12 w-full rounded-xl border border-(--border) bg-(--background) px-3 text-base text-(--foreground)"
               >
                 <option value="auto">auto</option>
                 <option value="cloudflare-ai">cloudflare-ai</option>
@@ -594,7 +594,7 @@ export function ToolsSettingsSection({
               </select>
             </label>
 
-            <p className="text-xs leading-5 text-[color:var(--muted)]">
+            <p className="text-xs leading-5 text-(--muted)">
               Local images and PDFs are sent to OpenRouter as data URLs. PDF OCR/parser choices and image output models may add provider costs.
             </p>
           </div>
@@ -628,7 +628,7 @@ export function ToolsSettingsSection({
             </DisclosureButton>
 
             {cachingAdvancedOpen ? (
-              <div className="mt-3 border-t border-[color:var(--border)] pt-3">
+              <div className="mt-3 border-t border-(--border) pt-3">
                 <NumberField
                   label="Cache TTL seconds"
                   value={responseCaching.ttlSeconds}
@@ -641,7 +641,7 @@ export function ToolsSettingsSection({
           </>
         ) : null}
 
-        <p className="mt-3 text-xs leading-5 text-[color:var(--muted)]">
+        <p className="mt-3 text-xs leading-5 text-(--muted)">
           Keep caching off for private or one-off prompts. Keep compression on for long conversations unless exact full-transcript recall matters.
         </p>
       </SectionCard>
@@ -708,13 +708,13 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-raised)] p-3">
+    <section className="rounded-xl border border-(--border) bg-(--surface-raised) p-3">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium">{title}</h3>
-          <p className="mt-1 text-xs leading-5 text-[color:var(--muted)]">{description}</p>
+          <p className="mt-1 text-xs leading-5 text-(--muted)">{description}</p>
         </div>
-        <span className="mt-0.5 shrink-0 text-[color:var(--accent)]">{icon}</span>
+        <span className="mt-0.5 shrink-0 text-(--accent)">{icon}</span>
       </div>
       {children}
     </section>
@@ -734,7 +734,7 @@ function DisclosureButton({
     <button
       type="button"
       onClick={onClick}
-      className="mt-3 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] px-3 text-left text-sm text-[color:var(--foreground)] transition active:scale-[0.99]"
+      className="mt-3 flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-(--border) px-3 text-left text-sm text-(--foreground) transition active:scale-[0.99]"
     >
       <span>{children}</span>
       <ChevronDown size={17} aria-hidden="true" className={`shrink-0 transition ${open ? "rotate-180" : ""}`} />
@@ -756,20 +756,23 @@ function ToolToggle({
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={title}
       onClick={() => onChange(!enabled)}
-      className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-left transition active:scale-[0.99]"
+      className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-(--border) bg-(--background) px-3 py-2 text-left transition active:scale-[0.99]"
     >
       <span className="min-w-0">
         <span className="block text-sm font-medium">{title}</span>
-        <span className="block text-xs leading-5 text-[color:var(--muted)]">{description}</span>
+        <span className="block text-xs leading-5 text-(--muted)">{description}</span>
       </span>
       <span
         className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition ${
-          enabled ? "justify-end bg-[color:var(--accent-strong)]" : "justify-start bg-[color:var(--surface-muted)]"
+          enabled ? "justify-end bg-(--accent-strong)" : "justify-start bg-(--surface-muted)"
         }`}
         aria-hidden="true"
       >
-        <span className="h-5 w-5 rounded-full bg-[color:var(--background)] shadow" />
+        <span className="h-5 w-5 rounded-full bg-(--background) shadow" />
       </span>
     </button>
   );
@@ -791,10 +794,10 @@ function DestructiveAction({
   onCancel: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] p-3">
+    <div className="rounded-xl border border-(--border) bg-(--background) p-3">
       <div className="mb-3">
         <p className="text-sm font-medium">{title}</p>
-        <p className="mt-1 text-xs leading-5 text-[color:var(--muted)]">{description}</p>
+        <p className="mt-1 text-xs leading-5 text-(--muted)">{description}</p>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row">
         <button
@@ -803,7 +806,7 @@ function DestructiveAction({
           className={`inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition active:scale-[0.98] ${
             confirming
               ? "bg-red-400 text-black"
-              : "border border-[color:var(--border)] bg-[color:var(--surface-raised)] text-[color:var(--foreground)]"
+              : "border border-(--border) bg-(--surface-raised) text-(--foreground)"
           }`}
         >
           {icon}
@@ -813,7 +816,7 @@ function DestructiveAction({
           <button
             type="button"
             onClick={onCancel}
-            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-[color:var(--border)] px-4 text-sm font-medium text-[color:var(--foreground)] transition active:scale-[0.98]"
+            className="inline-flex min-h-12 items-center justify-center rounded-xl border border-(--border) px-4 text-sm font-medium text-(--foreground) transition active:scale-[0.98]"
           >
             Cancel
           </button>
@@ -836,11 +839,11 @@ function SelectField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-medium text-[color:var(--muted)]">{label}</span>
+      <span className="mb-2 block text-xs font-medium text-(--muted)">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 text-base text-[color:var(--foreground)]"
+        className="min-h-12 w-full rounded-xl border border-(--border) bg-(--background) px-3 text-base text-(--foreground)"
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -867,7 +870,7 @@ function NumberField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-medium text-[color:var(--muted)]">{label}</span>
+      <span className="mb-2 block text-xs font-medium text-(--muted)">{label}</span>
       <input
         type="number"
         inputMode="numeric"
@@ -875,7 +878,7 @@ function NumberField({
         max={max}
         value={value}
         onChange={(event) => onChange(clampNumber(Number(event.target.value), min, max, value))}
-        className="min-h-12 w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 text-base text-[color:var(--foreground)]"
+        className="min-h-12 w-full rounded-xl border border-(--border) bg-(--background) px-3 text-base text-(--foreground)"
       />
     </label>
   );
@@ -892,7 +895,7 @@ function DomainField({
 }) {
   return (
     <label className="mt-3 block">
-      <span className="mb-2 block text-xs font-medium text-[color:var(--muted)]">{label}</span>
+      <span className="mb-2 block text-xs font-medium text-(--muted)">{label}</span>
       <textarea
         value={value.join("\n")}
         rows={2}
@@ -901,7 +904,7 @@ function DomainField({
         autoCorrect="off"
         placeholder="example.com, docs.example.com"
         onChange={(event) => onChange(parseDomains(event.target.value))}
-        className="min-h-20 w-full resize-y rounded-xl border border-[color:var(--border)] bg-[color:var(--background)] px-3 py-2 text-base leading-6 text-[color:var(--foreground)]"
+        className="min-h-20 w-full resize-y rounded-xl border border-(--border) bg-(--background) px-3 py-2 text-base leading-6 text-(--foreground)"
       />
     </label>
   );

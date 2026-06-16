@@ -3,7 +3,7 @@ import "./globals.css";
 
 const APP_NAME = "OpenRouter Chat";
 const APP_DESCRIPTION = "A mobile-first OpenRouter chat PWA.";
-const THEME_COLOR = "#08090a";
+const THEME_COLOR = "#f8f8f6";
 
 export const metadata: Metadata = {
   applicationName: APP_NAME,
@@ -45,7 +45,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: THEME_COLOR,
-  colorScheme: "dark",
+  colorScheme: "light",
 };
 
 export default function RootLayout({
@@ -54,7 +54,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

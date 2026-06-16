@@ -16,9 +16,11 @@ import {
 } from "lucide-react";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import type { ChatAttachment, ChatGeneratedFile, ChatMessage, ChatMessageSource } from "@/lib/types";
+import { formatBytes } from "@/lib/utils";
 
 type MessageBubbleProps = {
   message: ChatMessage;
+  contentOverride?: string;
   isStreaming?: boolean;
   showThinking?: boolean;
   onRetry?: () => void;
@@ -28,11 +30,13 @@ type Feedback = "up" | "down" | null;
 
 export function MessageBubble({
   message,
+  contentOverride,
   isStreaming = false,
   showThinking = false,
   onRetry,
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
+  const displayContent = contentOverride ?? message.content;
   const attachments = message.attachments ?? [];
   const files = message.files ?? [];
   const [copied, setCopied] = useState(false);
@@ -56,7 +60,7 @@ export function MessageBubble({
 
   async function copyMessage() {
     try {
-      await navigator.clipboard.writeText(message.content);
+      await navigator.clipboard.writeText(displayContent);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
     } catch {
@@ -65,7 +69,7 @@ export function MessageBubble({
   }
 
   function toggleSpeech() {
-    if (typeof window === "undefined" || !("speechSynthesis" in window) || !message.content.trim()) {
+    if (typeof window === "undefined" || !("speechSynthesis" in window) || !displayContent.trim()) {
       return;
     }
 
@@ -76,7 +80,7 @@ export function MessageBubble({
     }
 
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(message.content);
+    const utterance = new SpeechSynthesisUtterance(displayContent);
     utterance.onend = () => setSpeaking(false);
     utterance.onerror = () => setSpeaking(false);
     window.speechSynthesis.speak(utterance);
@@ -86,9 +90,9 @@ export function MessageBubble({
   if (isUser) {
     return (
       <article className="group flex justify-end">
-        <div className="max-w-[82%] md:max-w-[70%]">
-          <div className="rounded-2xl bg-[color:var(--user-bubble)] px-4 py-2.5 text-[0.95rem] leading-6 text-[color:var(--foreground)]">
-            {message.content ? <p className="whitespace-pre-wrap break-words">{message.content}</p> : null}
+        <div className="max-w-[86%] md:max-w-[68%]">
+          <div className="rounded-xl bg-(--user-bubble) px-4 py-2.5 text-[0.95rem] leading-6 text-(--foreground)">
+            {message.content ? <p className="whitespace-pre-wrap wrap-break-word">{message.content}</p> : null}
             <AttachmentGrid attachments={attachments} align="right" />
           </div>
           <MessageActions
@@ -107,20 +111,20 @@ export function MessageBubble({
   }
 
   return (
-    <article className="group max-w-3xl">
+    <article className="group max-w-184">
       {showThinking ? (
         <button
           type="button"
-          className="mb-3 inline-flex h-8 items-center gap-2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 text-xs text-[color:var(--muted)]"
+          className="mb-3 inline-flex h-8 items-center gap-2 rounded-md border border-(--border) bg-(--surface) px-3 text-xs text-(--muted)"
         >
           <TypingIndicator />
           Thought for a moment
         </button>
       ) : null}
 
-      {message.content ? (
+      {displayContent ? (
         <div className="assistant-message">
-          <MarkdownMessage content={message.content} />
+          <MarkdownMessage content={displayContent} deferRichBlocks={isStreaming} />
         </div>
       ) : files.length > 0 || showThinking ? null : isStreaming ? (
         <div className="py-2">
@@ -166,7 +170,7 @@ function MessageActions({
 }) {
   return (
     <div
-      className={`mt-2 flex items-center gap-1 text-[color:var(--muted)] opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 ${
+      className={`mt-2 flex items-center gap-1 text-(--muted) opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 ${
         align === "right" ? "justify-end" : "justify-start"
       }`}
     >
@@ -217,8 +221,8 @@ function ActionButton({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className={`grid h-8 w-8 place-items-center rounded-lg transition hover:bg-[color:var(--surface-muted)] ${
-        active ? "text-[color:var(--foreground)]" : ""
+      className={`grid h-8 w-8 place-items-center rounded-md transition hover:bg-(--surface-muted) ${
+        active ? "text-(--foreground)" : ""
       }`}
     >
       {children}
@@ -247,7 +251,7 @@ function AttachmentGrid({
           className={`group overflow-hidden rounded-xl border ${
             align === "right"
               ? "border-black/5 bg-white/65"
-              : "border-[color:var(--border)] bg-[color:var(--surface)]"
+              : "border-(--border) bg-(--surface)"
           }`}
         >
           {attachment.kind === "image" ? (
@@ -258,7 +262,7 @@ function AttachmentGrid({
             />
           ) : (
             <div className="flex min-h-24 items-center gap-3 p-3">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-[color:var(--surface-muted)] text-[color:var(--brand)]">
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-(--surface-muted) text-(--brand)">
                 <FileText size={21} aria-hidden="true" />
               </span>
               <span className="min-w-0">
@@ -284,14 +288,14 @@ function GeneratedFileGrid({ files }: { files: ChatGeneratedFile[] }) {
         file.mediaType.startsWith("image/") ? (
           <figure
             key={file.id}
-            className="overflow-hidden rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)]"
+            className="overflow-hidden rounded-lg border border-(--border) bg-(--surface)"
           >
             <img
               src={file.dataUrl}
               alt={file.name ?? `Generated image ${index + 1}`}
-              className="max-h-[32rem] w-full object-contain"
+              className="max-h-128 w-full object-contain"
             />
-            <figcaption className="flex items-center justify-between gap-3 border-t border-[color:var(--border)] px-3 py-2 text-xs text-[color:var(--muted)]">
+            <figcaption className="flex items-center justify-between gap-3 border-t border-(--border) px-3 py-2 text-xs text-(--muted)">
               <span className="inline-flex min-w-0 items-center gap-1.5">
                 <ImageIcon size={14} aria-hidden="true" />
                 <span className="truncate">{file.name ?? `Generated image ${index + 1}`}</span>
@@ -299,7 +303,7 @@ function GeneratedFileGrid({ files }: { files: ChatGeneratedFile[] }) {
               <a
                 href={file.dataUrl}
                 download={file.name ?? `generated-image-${index + 1}.${extensionFromMediaType(file.mediaType)}`}
-                className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-full border border-[color:var(--border)] px-2 text-[color:var(--foreground)] transition hover:bg-[color:var(--surface-muted)]"
+                className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-md border border-(--border) px-2 text-(--foreground) transition hover:bg-(--surface-muted)"
               >
                 <Download size={13} aria-hidden="true" />
                 Save
@@ -311,14 +315,14 @@ function GeneratedFileGrid({ files }: { files: ChatGeneratedFile[] }) {
             key={file.id}
             href={file.dataUrl}
             download={file.name ?? `generated-file-${index + 1}`}
-            className="flex min-h-16 items-center gap-3 rounded-2xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2 text-sm transition hover:bg-[color:var(--surface-muted)]"
+            className="flex min-h-16 items-center gap-3 rounded-lg border border-(--border) bg-(--surface) px-3 py-2 text-sm transition hover:bg-(--surface-muted)"
           >
-            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[color:var(--surface-muted)] text-[color:var(--brand)]">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-(--surface-muted) text-(--brand)">
               <FileText size={19} aria-hidden="true" />
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{file.name ?? "Generated file"}</span>
-              <span className="mt-0.5 block truncate text-xs text-[color:var(--muted)]">{file.mediaType}</span>
+              <span className="mt-0.5 block truncate text-xs text-(--muted)">{file.mediaType}</span>
             </span>
             <Download size={16} aria-hidden="true" />
           </a>
@@ -334,16 +338,16 @@ function SourceChips({ sources }: { sources: ChatMessageSource[] }) {
   }
 
   return (
-    <div className="mt-4 flex flex-wrap gap-2 border-t border-[color:var(--border)] pt-3">
+    <div className="mt-4 flex flex-wrap gap-2 border-t border-(--border) pt-3">
       {sources.map((source, index) => (
         <a
           key={`${source.url}-${source.id}`}
           href={source.url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex min-h-8 max-w-full items-center gap-1 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-2.5 text-xs text-[color:var(--foreground)] transition hover:bg-[color:var(--surface-muted)]"
+          className="inline-flex min-h-8 max-w-full items-center gap-1 rounded-md border border-(--border) bg-(--surface) px-2.5 text-xs text-(--foreground) transition hover:bg-(--surface-muted)"
         >
-          <span className="shrink-0 text-[color:var(--brand)]">{index + 1}</span>
+          <span className="shrink-0 text-(--brand)">{index + 1}</span>
           <span className="truncate">{source.title?.trim() || hostnameFromUrl(source.url)}</span>
         </a>
       ))}
@@ -368,14 +372,6 @@ function extensionFromMediaType(mediaType: string) {
   return subtype || "bin";
 }
 
-function formatBytes(bytes: number) {
-  if (bytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function formatTimestamp(createdAt?: string) {
   if (!createdAt) {
     return undefined;
@@ -395,9 +391,9 @@ function formatTimestamp(createdAt?: string) {
 function TypingIndicator() {
   return (
     <span className="inline-flex h-5 items-center gap-1.5" aria-label="Assistant is generating">
-      <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[color:var(--brand)]" />
-      <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[color:var(--brand)]" />
-      <span className="typing-dot h-1.5 w-1.5 rounded-full bg-[color:var(--brand)]" />
+      <span className="typing-dot h-1.5 w-1.5 rounded-full bg-(--brand)" />
+      <span className="typing-dot h-1.5 w-1.5 rounded-full bg-(--brand)" />
+      <span className="typing-dot h-1.5 w-1.5 rounded-full bg-(--brand)" />
     </span>
   );
 }

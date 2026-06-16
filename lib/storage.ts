@@ -1,48 +1,29 @@
 import {
   DEFAULT_MODEL,
-  DEFAULT_MESSAGE_TRANSFORMS,
-  DEFAULT_MULTIMODAL_SETTINGS,
-  DEFAULT_RESPONSE_CACHING,
-  DEFAULT_SERVER_TOOLS,
   DEFAULT_SETTINGS,
-  type ChatAttachment,
-  type ChatGeneratedFile,
   type ChatMessage,
   type ChatSettings,
   type ChatThread,
-  type FetchEngine,
-  type SearchContextSize,
-  type SearchEngine,
-  type ServerToolSettings,
 } from "@/lib/types";
+import {
+  isChatAttachment,
+  isChatGeneratedFile,
+  isChatMessage,
+  normalizeMessageTransforms,
+  normalizeMultimodalSettings,
+  normalizeResponseCaching,
+  normalizeServerTools,
+} from "@/lib/validation";
+import { createId } from "@/lib/utils";
 
 const MESSAGES_KEY = "openrouter-chat:messages:v1";
 const SETTINGS_KEY = "openrouter-chat:settings:v1";
 const THREADS_KEY = "openrouter-chat:threads:v1";
 const ACTIVE_THREAD_KEY = "openrouter-chat:active-thread-id:v1";
+const SIDEBAR_COLLAPSED_KEY = "openrouter-chat:sidebar-collapsed:v1";
 
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
-
-function isChatMessage(value: unknown): value is ChatMessage {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const message = value as Partial<ChatMessage>;
-  const sources = (message as { sources?: unknown }).sources;
-  const attachments = (message as { attachments?: unknown }).attachments;
-  const files = (message as { files?: unknown }).files;
-  return (
-    typeof message.id === "string" &&
-    (message.role === "system" || message.role === "user" || message.role === "assistant") &&
-    typeof message.content === "string" &&
-    (message.createdAt === undefined || typeof message.createdAt === "string") &&
-    (sources === undefined || Array.isArray(sources)) &&
-    (attachments === undefined || Array.isArray(attachments)) &&
-    (files === undefined || Array.isArray(files))
-  );
 }
 
 function normalizeSettings(value: unknown): ChatSettings {
@@ -83,213 +64,6 @@ function normalizeChatMessage(message: ChatMessage): ChatMessage {
     attachments: message.attachments?.filter(isChatAttachment),
     files: message.files?.filter(isChatGeneratedFile),
   };
-}
-
-function isChatAttachment(value: unknown): value is ChatAttachment {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const attachment = value as Partial<ChatAttachment>;
-  return (
-    typeof attachment.id === "string" &&
-    typeof attachment.name === "string" &&
-    typeof attachment.mediaType === "string" &&
-    typeof attachment.size === "number" &&
-    typeof attachment.dataUrl === "string" &&
-    attachment.dataUrl.startsWith("data:") &&
-    (attachment.kind === "image" || attachment.kind === "pdf")
-  );
-}
-
-function isChatGeneratedFile(value: unknown): value is ChatGeneratedFile {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const file = value as Partial<ChatGeneratedFile>;
-  return (
-    typeof file.id === "string" &&
-    typeof file.mediaType === "string" &&
-    typeof file.dataUrl === "string" &&
-    file.dataUrl.startsWith("data:") &&
-    (file.name === undefined || typeof file.name === "string")
-  );
-}
-
-function normalizeServerTools(value: unknown): ServerToolSettings {
-  if (!value || typeof value !== "object") {
-    return DEFAULT_SERVER_TOOLS;
-  }
-
-  const tools = value as Partial<ChatSettings["serverTools"]>;
-  const webSearch = tools.webSearch && typeof tools.webSearch === "object" ? tools.webSearch : {};
-  const webFetch = tools.webFetch && typeof tools.webFetch === "object" ? tools.webFetch : {};
-  const datetime = tools.datetime && typeof tools.datetime === "object" ? tools.datetime : {};
-
-  return {
-    webSearch: {
-      enabled: Boolean((webSearch as { enabled?: unknown }).enabled),
-      engine: normalizeSearchEngine((webSearch as { engine?: unknown }).engine),
-      maxResults: clampNumber((webSearch as { maxResults?: unknown }).maxResults, 1, 25, DEFAULT_SERVER_TOOLS.webSearch.maxResults),
-      maxTotalResults: clampNumber((webSearch as { maxTotalResults?: unknown }).maxTotalResults, 1, 100, DEFAULT_SERVER_TOOLS.webSearch.maxTotalResults),
-      searchContextSize: normalizeSearchContextSize((webSearch as { searchContextSize?: unknown }).searchContextSize),
-      allowedDomains: normalizeDomains((webSearch as { allowedDomains?: unknown }).allowedDomains),
-      excludedDomains: normalizeDomains((webSearch as { excludedDomains?: unknown }).excludedDomains),
-    },
-    webFetch: {
-      enabled: Boolean((webFetch as { enabled?: unknown }).enabled),
-      engine: normalizeFetchEngine((webFetch as { engine?: unknown }).engine),
-      maxUses: clampNumber((webFetch as { maxUses?: unknown }).maxUses, 1, 50, DEFAULT_SERVER_TOOLS.webFetch.maxUses),
-      maxContentTokens: clampNumber((webFetch as { maxContentTokens?: unknown }).maxContentTokens, 1000, 200000, DEFAULT_SERVER_TOOLS.webFetch.maxContentTokens),
-      allowedDomains: normalizeDomains((webFetch as { allowedDomains?: unknown }).allowedDomains),
-      blockedDomains: normalizeDomains((webFetch as { blockedDomains?: unknown }).blockedDomains),
-    },
-    datetime: {
-      enabled: Boolean((datetime as { enabled?: unknown }).enabled),
-      timezone:
-        typeof (datetime as { timezone?: unknown }).timezone === "string" &&
-        isValidTimezone((datetime as { timezone: string }).timezone.trim())
-          ? (datetime as { timezone: string }).timezone.trim()
-          : DEFAULT_SERVER_TOOLS.datetime.timezone,
-    },
-  };
-}
-
-function normalizeMultimodalSettings(value: unknown): ChatSettings["multimodal"] {
-  if (!value || typeof value !== "object") {
-    return DEFAULT_MULTIMODAL_SETTINGS;
-  }
-
-  const multimodal = value as Partial<ChatSettings["multimodal"]>;
-  const imageGeneration =
-    multimodal.imageGeneration && typeof multimodal.imageGeneration === "object"
-      ? multimodal.imageGeneration
-      : {};
-  const pdfEngine = multimodal.pdfEngine;
-
-  return {
-    imageGeneration: {
-      enabled: Boolean((imageGeneration as { enabled?: unknown }).enabled),
-      mode:
-        (imageGeneration as { mode?: unknown }).mode === "image-only"
-          ? "image-only"
-          : DEFAULT_MULTIMODAL_SETTINGS.imageGeneration.mode,
-      aspectRatio:
-        typeof (imageGeneration as { aspectRatio?: unknown }).aspectRatio === "string" &&
-        (imageGeneration as { aspectRatio: string }).aspectRatio.trim()
-          ? (imageGeneration as { aspectRatio: string }).aspectRatio.trim()
-          : DEFAULT_MULTIMODAL_SETTINGS.imageGeneration.aspectRatio,
-    },
-    pdfEngine:
-      pdfEngine === "cloudflare-ai" || pdfEngine === "mistral-ocr" || pdfEngine === "native"
-        ? pdfEngine
-        : DEFAULT_MULTIMODAL_SETTINGS.pdfEngine,
-  };
-}
-
-function normalizeMessageTransforms(value: unknown): ChatSettings["messageTransforms"] {
-  if (!value || typeof value !== "object") {
-    return DEFAULT_MESSAGE_TRANSFORMS;
-  }
-
-  const transforms = value as Partial<ChatSettings["messageTransforms"]>;
-  const contextCompression =
-    transforms.contextCompression && typeof transforms.contextCompression === "object"
-      ? transforms.contextCompression
-      : {};
-
-  return {
-    contextCompression: {
-      enabled:
-        typeof (contextCompression as { enabled?: unknown }).enabled === "boolean"
-          ? (contextCompression as { enabled: boolean }).enabled
-          : DEFAULT_MESSAGE_TRANSFORMS.contextCompression.enabled,
-    },
-  };
-}
-
-function normalizeResponseCaching(value: unknown): ChatSettings["responseCaching"] {
-  if (!value || typeof value !== "object") {
-    return DEFAULT_RESPONSE_CACHING;
-  }
-
-  const caching = value as Partial<ChatSettings["responseCaching"]>;
-
-  return {
-    enabled: Boolean(caching.enabled),
-    ttlSeconds: clampNumber(
-      caching.ttlSeconds,
-      1,
-      86400,
-      DEFAULT_RESPONSE_CACHING.ttlSeconds,
-    ),
-  };
-}
-
-function normalizeSearchEngine(value: unknown): SearchEngine {
-  return value === "native" ||
-    value === "exa" ||
-    value === "firecrawl" ||
-    value === "parallel" ||
-    value === "perplexity"
-    ? value
-    : "auto";
-}
-
-function normalizeFetchEngine(value: unknown): FetchEngine {
-  return value === "native" ||
-    value === "exa" ||
-    value === "openrouter" ||
-    value === "firecrawl" ||
-    value === "parallel"
-    ? value
-    : "auto";
-}
-
-function normalizeSearchContextSize(value: unknown): SearchContextSize {
-  return value === "low" || value === "medium" || value === "high" ? value : "auto";
-}
-
-function normalizeDomains(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return Array.from(
-    new Set(
-      value
-        .filter((domain): domain is string => typeof domain === "string")
-        .map((domain) => domain.trim().toLowerCase())
-        .filter(Boolean),
-    ),
-  );
-}
-
-function clampNumber(value: unknown, min: number, max: number, fallback: number) {
-  const numeric = typeof value === "number" && Number.isFinite(value) ? value : fallback;
-  return Math.min(max, Math.max(min, Math.round(numeric)));
-}
-
-function isValidTimezone(value: string) {
-  if (!value) {
-    return false;
-  }
-
-  try {
-    Intl.DateTimeFormat(undefined, { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function createId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function titleFromMessages(messages: ChatMessage[]) {
@@ -408,6 +182,22 @@ export function saveActiveThreadId(threadId: string) {
   }
 
   window.localStorage.setItem(ACTIVE_THREAD_KEY, threadId);
+}
+
+export function loadSidebarCollapsed() {
+  if (!canUseStorage()) {
+    return false;
+  }
+
+  return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true";
+}
+
+export function saveSidebarCollapsed(collapsed: boolean) {
+  if (!canUseStorage()) {
+    return;
+  }
+
+  window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "true" : "false");
 }
 
 export function clearStoredThreads() {

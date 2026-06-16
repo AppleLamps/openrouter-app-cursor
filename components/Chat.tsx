@@ -7,15 +7,6 @@ import { Composer } from "@/components/Composer";
 import { MessageBubble } from "@/components/MessageBubble";
 import { SettingsModal } from "@/components/SettingsModal";
 import {
-  clearStoredSettings,
-  loadActiveThreadId,
-  loadSettings,
-  loadThreads,
-  saveActiveThreadId,
-  saveSettings,
-  saveThreads,
-} from "@/lib/storage";
-import {
   DEFAULT_SETTINGS,
   type ApiStatus,
   type ChatAttachment,
@@ -25,6 +16,22 @@ import {
   type ChatSettings,
   type ChatThread,
 } from "@/lib/types";
+import {
+  clearStoredSettings,
+  loadActiveThreadId,
+  loadSettings,
+  loadSidebarCollapsed,
+  loadThreads,
+  saveActiveThreadId,
+  saveSettings,
+  saveSidebarCollapsed,
+  saveThreads,
+} from "@/lib/storage";
+import { createId } from "@/lib/utils";
+import {
+  isChatGeneratedFile as isGeneratedFile,
+  isChatMessageSource as isMessageSource,
+} from "@/lib/validation";
 
 type ApiErrorResponse = {
   error?: {
@@ -50,6 +57,14 @@ type ChatStreamEvent =
   | { type: "error"; error?: { message?: string } }
   | { type: "done" };
 
+type StreamingDraft = {
+  threadId: string;
+  messageId: string;
+  content: string;
+};
+
+const THREADS_SAVE_DEBOUNCE_MS = 750;
+
 export function Chat() {
   const [hydrated, setHydrated] = useState(false);
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -63,8 +78,17 @@ export function Chat() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [noticeText, setNoticeText] = useState("");
+  const [streamingDraft, setStreamingDraft] = useState<StreamingDraft | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const isStreamingRef = useRef(false);
+  const streamingDraftRef = useRef<StreamingDraft | null>(null);
+  const streamingFrameRef = useRef<number | null>(null);
+
+  const setStreamingActive = useCallback((active: boolean) => {
+    isStreamingRef.current = active;
+    setIsStreaming(active);
+  }, []);
 
   useEffect(() => {
     const loadedThreads = loadThreads();
@@ -75,13 +99,22 @@ export function Chat() {
     setThreads(initialThreads);
     setActiveThreadId(activeThread.id);
     setSettings(loadSettings());
+    setSidebarCollapsed(loadSidebarCollapsed());
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (hydrated) {
-      saveThreads(threads);
+    if (!hydrated) {
+      return;
     }
+
+    const timeout = window.setTimeout(() => {
+      saveThreads(threads);
+    }, THREADS_SAVE_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
   }, [hydrated, threads]);
 
   useEffect(() => {
@@ -95,6 +128,12 @@ export function Chat() {
       saveSettings(settings);
     }
   }, [hydrated, settings]);
+
+  useEffect(() => {
+    if (hydrated) {
+      saveSidebarCollapsed(sidebarCollapsed);
+    }
+  }, [hydrated, sidebarCollapsed]);
 
   const activeThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) ?? null,
@@ -110,9 +149,9 @@ export function Chat() {
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
-      behavior: messages.length > 2 ? "smooth" : "auto",
+      behavior: visibleMessages.length > 2 ? "smooth" : "auto",
     });
-  }, [messages, isStreaming]);
+  }, [visibleMessages.length, isStreaming, streamingDraft?.content]);
 
   const refreshApiStatus = useCallback(
     async (apiKeyOverride?: string) => {
@@ -161,6 +200,32 @@ export function Chat() {
     setThreads((current) => current.map((thread) => (thread.id === threadId ? updater(thread) : thread)));
   }, []);
 
+  const clearStreamingDraft = useCallback(() => {
+    if (streamingFrameRef.current !== null) {
+      cancelAnimationFrame(streamingFrameRef.current);
+      streamingFrameRef.current = null;
+    }
+
+    streamingDraftRef.current = null;
+    setStreamingDraft(null);
+  }, []);
+
+  const scheduleStreamingDraft = useCallback((threadId: string, messageId: string, content: string) => {
+    streamingDraftRef.current = { threadId, messageId, content };
+
+    if (streamingFrameRef.current !== null) {
+      return;
+    }
+
+    streamingFrameRef.current = requestAnimationFrame(() => {
+      streamingFrameRef.current = null;
+      const draft = streamingDraftRef.current;
+      if (draft) {
+        setStreamingDraft(draft);
+      }
+    });
+  }, []);
+
   const updateAssistantMessage = useCallback(
     (threadId: string, messageId: string, content: string) => {
       updateThread(threadId, (thread) => ({
@@ -172,6 +237,14 @@ export function Chat() {
       }));
     },
     [updateThread],
+  );
+
+  const commitAssistantMessage = useCallback(
+    (threadId: string, messageId: string, content: string) => {
+      clearStreamingDraft();
+      updateAssistantMessage(threadId, messageId, content);
+    },
+    [clearStreamingDraft, updateAssistantMessage],
   );
 
   const addAssistantSource = useCallback(
@@ -234,7 +307,7 @@ export function Chat() {
       title: string;
       requestMessages: ChatMessage[];
     }) => {
-      if (isStreaming) {
+      if (isStreamingRef.current) {
         return false;
       }
 
@@ -254,7 +327,7 @@ export function Chat() {
       const now = new Date().toISOString();
 
       setStatusText("");
-      setIsStreaming(true);
+      setStreamingActive(true);
       updateThread(threadId, (thread) => ({
         ...thread,
         title,
@@ -289,14 +362,14 @@ export function Chat() {
 
           if (!response.ok) {
             const message = await readErrorMessage(response);
-            updateAssistantMessage(threadId, assistantMessage.id, message);
+            commitAssistantMessage(threadId, assistantMessage.id, message);
             setStatusText(message);
             return;
           }
 
           if (!response.body) {
             const message = "The server did not return a stream.";
-            updateAssistantMessage(threadId, assistantMessage.id, message);
+            commitAssistantMessage(threadId, assistantMessage.id, message);
             setStatusText(message);
             return;
           }
@@ -314,13 +387,13 @@ export function Chat() {
             buffer = processStreamEvents(buffer, {
               onText: (text) => {
                 streamedContent += text;
-                updateAssistantMessage(threadId, assistantMessage.id, streamedContent);
+                scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent);
               },
               onSource: (source) => addAssistantSource(threadId, assistantMessage.id, source),
               onFile: (file) => addAssistantFile(threadId, assistantMessage.id, file),
               onError: (message) => {
                 streamedContent = message;
-                updateAssistantMessage(threadId, assistantMessage.id, message);
+                commitAssistantMessage(threadId, assistantMessage.id, message);
                 setStatusText(message);
               },
             });
@@ -330,24 +403,24 @@ export function Chat() {
           processStreamEvents(`${buffer}\n`, {
             onText: (text) => {
               streamedContent += text;
-              updateAssistantMessage(threadId, assistantMessage.id, streamedContent);
+              scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent);
             },
             onSource: (source) => addAssistantSource(threadId, assistantMessage.id, source),
             onFile: (file) => addAssistantFile(threadId, assistantMessage.id, file),
             onError: (message) => {
               streamedContent = message;
-              updateAssistantMessage(threadId, assistantMessage.id, message);
+              commitAssistantMessage(threadId, assistantMessage.id, message);
               setStatusText(message);
             },
           });
-          updateAssistantMessage(
+          commitAssistantMessage(
             threadId,
             assistantMessage.id,
             streamedContent.trim() ? streamedContent : "No response.",
           );
         } catch (error) {
           if (controller.signal.aborted) {
-            updateAssistantMessage(
+            commitAssistantMessage(
               threadId,
               assistantMessage.id,
               streamedContent.trim() ? streamedContent : "Generation stopped.",
@@ -360,17 +433,25 @@ export function Chat() {
             error instanceof TypeError
               ? "Network failure. Check your connection and try again."
               : "The response stream was interrupted. Try again.";
-          updateAssistantMessage(threadId, assistantMessage.id, message);
+          commitAssistantMessage(threadId, assistantMessage.id, message);
           setStatusText(message);
         } finally {
           abortRef.current = null;
-          setIsStreaming(false);
+          setStreamingActive(false);
         }
       })();
 
       return true;
     },
-    [addAssistantFile, addAssistantSource, isStreaming, settings, updateAssistantMessage, updateThread],
+    [
+      addAssistantFile,
+      addAssistantSource,
+      commitAssistantMessage,
+      scheduleStreamingDraft,
+      setStreamingActive,
+      settings,
+      updateThread,
+    ],
   );
 
   const sendMessage = useCallback(
@@ -512,7 +593,7 @@ export function Chat() {
 
   const retryAssistantMessage = useCallback(
     (assistantMessageId: string) => {
-      if (!activeThread || isStreaming) {
+      if (!activeThread || isStreamingRef.current) {
         return;
       }
 
@@ -534,13 +615,23 @@ export function Chat() {
         return;
       }
 
+      const trailingMessageCount = activeThread.messages.length - assistantIndex - 1;
+      if (trailingMessageCount > 0) {
+        const confirmed = window.confirm(
+          `Retrying will remove ${trailingMessageCount} later message${trailingMessageCount === 1 ? "" : "s"} from this chat. Continue?`,
+        );
+        if (!confirmed) {
+          return;
+        }
+      }
+
       startAssistantRequest({
         threadId: activeThread.id,
         title: activeThread.title,
         requestMessages,
       });
     },
-    [activeThread, isStreaming, startAssistantRequest],
+    [activeThread, startAssistantRequest],
   );
 
   return (
@@ -560,22 +651,22 @@ export function Chat() {
         onComingSoon={showComingSoon}
       />
 
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[color:var(--background)]">
-        <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-[color:var(--border)] px-3 md:px-5">
+      <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-(--background)">
+        <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-(--border) bg-(--background) px-3 md:px-5">
           <div className="flex min-w-0 items-center gap-1.5">
             <button
               type="button"
               title="Open sidebar"
               aria-label="Open sidebar"
               onClick={() => setSidebarOpen(true)}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)] lg:hidden"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-(--muted) hover:bg-(--surface-muted) lg:hidden"
             >
               <Menu size={17} aria-hidden="true" />
             </button>
             <button
               type="button"
               onClick={renameActiveThread}
-              className="min-w-0 truncate rounded-lg px-2 py-1 text-left text-sm font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-muted)]"
+              className="min-w-0 truncate rounded-md px-2 py-1 text-left text-[0.92rem] font-semibold text-(--foreground) hover:bg-(--surface-muted)"
             >
               {activeThread?.title || "New chat"}
             </button>
@@ -584,7 +675,7 @@ export function Chat() {
               title="More options"
               aria-label="More options"
               onClick={() => showComingSoon("Chat options")}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)]"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-(--muted) hover:bg-(--surface-muted)"
             >
               <MoreHorizontal size={17} aria-hidden="true" />
             </button>
@@ -593,7 +684,7 @@ export function Chat() {
             <button
               type="button"
               onClick={() => showComingSoon("Share")}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 text-sm font-medium text-[color:var(--foreground)] hover:bg-[color:var(--surface-muted)]"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-(--border) bg-(--surface-raised) px-3 text-sm font-medium text-(--foreground) shadow-[0_1px_2px_rgba(31,31,30,0.06)] hover:bg-(--surface-muted)"
             >
               <Share2 size={14} aria-hidden="true" />
               Share
@@ -603,47 +694,55 @@ export function Chat() {
 
         <section
           ref={scrollRef}
-          className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8"
+          className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-7 md:px-8"
           aria-label="Chat messages"
         >
           {!hydrated ? (
-            <div className="flex min-h-full items-center justify-center px-6 text-center text-sm text-[color:var(--muted)]">
+            <div className="flex min-h-full items-center justify-center px-6 text-center text-sm text-(--muted)">
               Loading chat...
             </div>
           ) : visibleMessages.length === 0 ? (
             <div className="flex min-h-full items-center justify-center px-2 pb-20 text-center">
-              <div className="w-full max-w-3xl">
+              <div className="w-full max-w-184">
                 <div className="mb-8 flex items-center justify-center gap-3">
-                  <span className="brand-burst text-4xl text-[color:var(--brand)]" aria-hidden="true">
+                  <span className="brand-burst text-4xl text-(--brand)" aria-hidden="true">
                     *
                   </span>
-                  <h1 className="font-serif text-4xl leading-tight text-[color:var(--foreground)] md:text-5xl">
+                  <h1 className="font-serif text-4xl leading-tight text-(--foreground) md:text-[2.75rem]">
                     Lamps returns!
                   </h1>
                 </div>
-                <p className="mx-auto max-w-md text-sm text-[color:var(--muted)]">
+                <p className="mx-auto max-w-md text-sm text-(--muted)">
                   Draft an email, plan a project, summarize a document, or keep a thought moving.
                 </p>
               </div>
             </div>
           ) : (
-            <div className="mx-auto w-full max-w-3xl space-y-10">
-              {visibleMessages.map((message, index) => (
-                <MessageBubble
-                  key={message.id}
-                  message={message}
-                  isStreaming={isStreaming && message.id === visibleMessages.at(-1)?.id}
-                  onRetry={message.role === "assistant" ? () => retryAssistantMessage(message.id) : undefined}
-                  showThinking={message.role === "assistant" && index === visibleMessages.length - 1 && isStreaming}
-                />
-              ))}
+            <div className="mx-auto w-full max-w-184 space-y-9">
+              {visibleMessages.map((message, index) => {
+                const isActiveStream =
+                  isStreaming && message.id === visibleMessages.at(-1)?.id && message.role === "assistant";
+                const contentOverride =
+                  streamingDraft?.messageId === message.id ? streamingDraft.content : undefined;
+
+                return (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    contentOverride={contentOverride}
+                    isStreaming={isActiveStream}
+                    onRetry={message.role === "assistant" ? () => retryAssistantMessage(message.id) : undefined}
+                    showThinking={message.role === "assistant" && index === visibleMessages.length - 1 && isStreaming}
+                  />
+                );
+              })}
             </div>
           )}
         </section>
 
-        <div className="shrink-0 bg-gradient-to-t from-[color:var(--background)] via-[color:var(--background)] to-transparent px-4 pb-3 md:px-8">
+        <div className="shrink-0 bg-linear-to-t from-(--background) via-(--background) to-transparent px-4 pb-3 md:px-8">
           {statusText ? (
-            <p className="mx-auto max-w-3xl pb-2 text-xs text-[color:var(--muted)]" role="status">
+            <p className="mx-auto max-w-184 pb-2 text-xs text-(--muted)" role="status">
               {statusText}
             </p>
           ) : null}
@@ -660,7 +759,7 @@ export function Chat() {
       </section>
 
       {noticeText ? (
-        <div className="fixed bottom-5 left-1/2 z-[80] -translate-x-1/2 rounded-full border border-[color:var(--border)] bg-[color:var(--foreground)] px-4 py-2 text-sm text-[color:var(--background)] shadow-[0_10px_30px_rgba(80,67,52,0.16)]">
+        <div className="fixed bottom-5 left-1/2 z-80 -translate-x-1/2 rounded-md border border-(--border) bg-(--foreground) px-4 py-2 text-sm text-(--background) shadow-[0_10px_30px_rgba(31,31,30,0.14)]">
           {noticeText}
         </div>
       ) : null}
@@ -678,14 +777,6 @@ export function Chat() {
       />
     </main>
   );
-}
-
-function createId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function createEmptyThread(): ChatThread {
@@ -754,37 +845,9 @@ function processStreamEvents(
         handlers.onError(event.error.message);
       }
     } catch {
-      handlers.onText(line);
+      continue;
     }
   }
 
   return remainder;
-}
-
-function isGeneratedFile(value: unknown): value is ChatGeneratedFile {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const file = value as Partial<ChatGeneratedFile>;
-  return (
-    typeof file.id === "string" &&
-    typeof file.mediaType === "string" &&
-    typeof file.dataUrl === "string" &&
-    file.dataUrl.startsWith("data:") &&
-    (file.name === undefined || typeof file.name === "string")
-  );
-}
-
-function isMessageSource(value: unknown): value is ChatMessageSource {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const source = value as Partial<ChatMessageSource>;
-  return (
-    typeof source.id === "string" &&
-    typeof source.url === "string" &&
-    (source.title === undefined || typeof source.title === "string")
-  );
 }

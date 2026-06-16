@@ -2,19 +2,19 @@
 
 :root {
   color-scheme: light;
-  --background: #fbfaf7;
-  --sidebar: #f0eee7;
-  --surface: #ffffff;
-  --surface-raised: #f8f5ef;
-  --surface-muted: #eeeae1;
+  --background: #f8f8f6;
+  --sidebar: #f3f2ee;
+  --surface: #fffefa;
+  --surface-raised: #ffffff;
+  --surface-muted: #ece9e2;
   --user-bubble: #efeee9;
-  --foreground: #26221c;
-  --muted: #736d64;
-  --border: rgba(38, 34, 28, 0.11);
-  --border-strong: rgba(38, 34, 28, 0.18);
-  --accent: #8f4f2f;
-  --accent-strong: #d96c42;
-  --brand: #d96c42;
+  --foreground: #121212;
+  --muted: #7b7974;
+  --border: rgba(31, 31, 30, 0.12);
+  --border-strong: rgba(31, 31, 30, 0.18);
+  --accent: #9a4f2f;
+  --accent-strong: #c9643d;
+  --brand: #c9643d;
   --danger: #b43b35;
 }
 
@@ -97,8 +97,8 @@ select:focus-visible {
     Georgia,
     "Times New Roman",
     serif;
-  font-size: 1.06rem;
-  line-height: 1.78;
+  font-size: 1.075rem;
+  line-height: 1.72;
   color: var(--foreground);
 }
 
@@ -109,7 +109,7 @@ select:focus-visible {
 .assistant-message h1,
 .assistant-message h2,
 .assistant-message h3 {
-  margin: 1.4rem 0 0.5rem;
+  margin: 1.35rem 0 0.55rem;
   font-family:
     Georgia,
     "Times New Roman",

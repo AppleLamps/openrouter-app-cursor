@@ -1,19 +1,26 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { streamText, type JSONValue, type ModelMessage, type TextStreamPart } from "ai";
+import { streamText, type JSONValue, type ModelMessage, type TextStreamPart, type ToolSet } from "ai";
 import {
-  DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MODEL,
-  DEFAULT_MULTIMODAL_SETTINGS,
-  DEFAULT_RESPONSE_CACHING,
   DEFAULT_SERVER_TOOLS,
-  type ChatAttachment,
-  type ChatGeneratedFile,
   type ChatMessage,
   type ChatMessageSource,
-  type MessageTransformSettings,
-  type MultimodalSettings,
+  type ChatGeneratedFile,
   type ResponseCachingSettings,
 } from "@/lib/types";
+import { createId } from "@/lib/utils";
+import {
+  clampNumber,
+  isChatAttachment,
+  isChatMessage,
+  isValidTimezone,
+  normalizeDomainsForApi,
+  normalizeFetchEngine,
+  normalizeMessageTransforms,
+  normalizeMultimodalSettings,
+  normalizeResponseCaching,
+  normalizeSearchEngine,
+} from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -64,12 +71,7 @@ type PublicErrorCode =
 
 const MODEL_PATTERN = /^~?[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.:-]+$/;
 
-export async function GET() {
-  return Response.json({
-    configured: false,
-    source: "local-settings",
-  });
-}
+type ChatTextStreamPart = TextStreamPart<ToolSet>;
 
 export async function POST(req: Request) {
   let body: ChatRequestBody;
@@ -293,40 +295,9 @@ function toModelMessage(message: ChatMessage): ModelMessage | null {
   return parts.length > 0 ? { role: "user", content: parts } : null;
 }
 
-function isChatMessage(value: unknown): value is ChatMessage {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const message = value as Partial<ChatMessage>;
-  return (
-    typeof message.id === "string" &&
-    (message.role === "system" || message.role === "user" || message.role === "assistant") &&
-    typeof message.content === "string" &&
-    (message.attachments === undefined || Array.isArray(message.attachments))
-  );
-}
-
-function isChatAttachment(value: unknown): value is ChatAttachment {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const attachment = value as Partial<ChatAttachment>;
-  return (
-    typeof attachment.id === "string" &&
-    typeof attachment.name === "string" &&
-    typeof attachment.mediaType === "string" &&
-    typeof attachment.size === "number" &&
-    typeof attachment.dataUrl === "string" &&
-    attachment.dataUrl.startsWith("data:") &&
-    (attachment.kind === "image" || attachment.kind === "pdf")
-  );
-}
-
-async function createPrimedEventResponse(fullStream: AsyncIterable<TextStreamPart<any>>) {
+async function createPrimedEventResponse(fullStream: AsyncIterable<ChatTextStreamPart>) {
   const iterator = fullStream[Symbol.asyncIterator]();
-  let firstChunk: TextStreamPart<any>;
+  let firstChunk: ChatTextStreamPart;
 
   try {
     for (;;) {
@@ -395,7 +366,7 @@ async function createPrimedEventResponse(fullStream: AsyncIterable<TextStreamPar
   });
 }
 
-function isRenderableStreamPart(part: TextStreamPart<any>) {
+function isRenderableStreamPart(part: ChatTextStreamPart) {
   return (
     (part.type === "text-delta" && Boolean(part.text)) ||
     (part.type === "source" && part.sourceType === "url") ||
@@ -403,9 +374,8 @@ function isRenderableStreamPart(part: TextStreamPart<any>) {
   );
 }
 
-function getStreamPartError(part: TextStreamPart<any>) {
-  const maybeError = part as { type?: string; error?: unknown };
-  return maybeError.type === "error" ? maybeError.error : null;
+function getStreamPartError(part: ChatTextStreamPart) {
+  return part.type === "error" ? part.error : null;
 }
 
 function streamErrorEvent(error: unknown): StreamEvent {
@@ -422,7 +392,7 @@ function streamErrorEvent(error: unknown): StreamEvent {
 function enqueueStreamPart(
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
-  part: TextStreamPart<any>,
+  part: ChatTextStreamPart,
 ) {
   if (part.type === "text-delta" && part.text) {
     enqueueEvent(controller, encoder, { type: "text", text: part.text });
@@ -474,12 +444,12 @@ function validateServerTools(value: unknown): ServerToolValidation {
 
   if (Boolean(webSearch?.enabled)) {
     const engine = normalizeSearchEngine(webSearch?.engine);
-    const allowedDomains = normalizeDomains(webSearch?.allowedDomains);
-    const excludedDomains = normalizeDomains(webSearch?.excludedDomains);
+    const allowedDomains = normalizeDomainsForApi(webSearch?.allowedDomains);
+    const excludedDomains = normalizeDomainsForApi(webSearch?.excludedDomains);
     const parameters = compactParameters({
       engine,
-      max_results: clampInteger(webSearch?.maxResults, 1, 25, DEFAULT_SERVER_TOOLS.webSearch.maxResults),
-      max_total_results: clampInteger(
+      max_results: clampNumber(webSearch?.maxResults, 1, 25, DEFAULT_SERVER_TOOLS.webSearch.maxResults),
+      max_total_results: clampNumber(
         webSearch?.maxTotalResults,
         1,
         100,
@@ -503,15 +473,15 @@ function validateServerTools(value: unknown): ServerToolValidation {
   if (Boolean(webFetch?.enabled)) {
     const parameters = compactParameters({
       engine: normalizeFetchEngine(webFetch?.engine),
-      max_uses: clampInteger(webFetch?.maxUses, 1, 50, DEFAULT_SERVER_TOOLS.webFetch.maxUses),
-      max_content_tokens: clampInteger(
+      max_uses: clampNumber(webFetch?.maxUses, 1, 50, DEFAULT_SERVER_TOOLS.webFetch.maxUses),
+      max_content_tokens: clampNumber(
         webFetch?.maxContentTokens,
         1000,
         200000,
         DEFAULT_SERVER_TOOLS.webFetch.maxContentTokens,
       ),
-      allowed_domains: normalizeDomains(webFetch?.allowedDomains),
-      blocked_domains: normalizeDomains(webFetch?.blockedDomains),
+      allowed_domains: normalizeDomainsForApi(webFetch?.allowedDomains),
+      blocked_domains: normalizeDomainsForApi(webFetch?.blockedDomains),
     });
     tools.push({ type: "openrouter:web_fetch", parameters });
   }
@@ -579,133 +549,8 @@ function validateMessageTransforms(value: unknown): MessageTransformValidation {
   };
 }
 
-function normalizeMultimodalSettings(value: unknown): MultimodalSettings {
-  if (!value || typeof value !== "object") {
-    return DEFAULT_MULTIMODAL_SETTINGS;
-  }
-
-  const multimodal = value as Partial<MultimodalSettings>;
-  const imageGeneration =
-    multimodal.imageGeneration && typeof multimodal.imageGeneration === "object"
-      ? multimodal.imageGeneration
-      : {};
-
-  return {
-    imageGeneration: {
-      enabled: Boolean((imageGeneration as { enabled?: unknown }).enabled),
-      mode:
-        (imageGeneration as { mode?: unknown }).mode === "image-only"
-          ? "image-only"
-          : DEFAULT_MULTIMODAL_SETTINGS.imageGeneration.mode,
-      aspectRatio: normalizeAspectRatio((imageGeneration as { aspectRatio?: unknown }).aspectRatio),
-    },
-    pdfEngine:
-      multimodal.pdfEngine === "cloudflare-ai" ||
-      multimodal.pdfEngine === "mistral-ocr" ||
-      multimodal.pdfEngine === "native"
-        ? multimodal.pdfEngine
-        : DEFAULT_MULTIMODAL_SETTINGS.pdfEngine,
-  };
-}
-
-function normalizeMessageTransforms(value: unknown): MessageTransformSettings {
-  if (!value || typeof value !== "object") {
-    return DEFAULT_MESSAGE_TRANSFORMS;
-  }
-
-  const transforms = value as Partial<MessageTransformSettings>;
-  const contextCompression =
-    transforms.contextCompression && typeof transforms.contextCompression === "object"
-      ? transforms.contextCompression
-      : {};
-
-  return {
-    contextCompression: {
-      enabled:
-        typeof (contextCompression as { enabled?: unknown }).enabled === "boolean"
-          ? (contextCompression as { enabled: boolean }).enabled
-          : DEFAULT_MESSAGE_TRANSFORMS.contextCompression.enabled,
-    },
-  };
-}
-
-function normalizeResponseCaching(value: unknown): ResponseCachingSettings {
-  if (!value || typeof value !== "object") {
-    return DEFAULT_RESPONSE_CACHING;
-  }
-
-  const caching = value as Partial<ResponseCachingSettings>;
-
-  return {
-    enabled: Boolean(caching.enabled),
-    ttlSeconds: clampInteger(
-      caching.ttlSeconds,
-      1,
-      86400,
-      DEFAULT_RESPONSE_CACHING.ttlSeconds,
-    ),
-  };
-}
-
-function normalizeAspectRatio(value: unknown) {
-  return value === "1:1" ||
-    value === "2:3" ||
-    value === "3:2" ||
-    value === "3:4" ||
-    value === "4:3" ||
-    value === "4:5" ||
-    value === "5:4" ||
-    value === "9:16" ||
-    value === "16:9" ||
-    value === "21:9"
-    ? value
-    : DEFAULT_MULTIMODAL_SETTINGS.imageGeneration.aspectRatio;
-}
-
 function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
-function normalizeSearchEngine(value: unknown) {
-  return value === "native" ||
-    value === "exa" ||
-    value === "firecrawl" ||
-    value === "parallel" ||
-    value === "perplexity"
-    ? value
-    : "auto";
-}
-
-function normalizeFetchEngine(value: unknown) {
-  return value === "native" ||
-    value === "exa" ||
-    value === "openrouter" ||
-    value === "firecrawl" ||
-    value === "parallel"
-    ? value
-    : "auto";
-}
-
-function normalizeDomains(value: unknown) {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-
-  const domains = Array.from(
-    new Set(
-      value
-        .filter((domain): domain is string => typeof domain === "string")
-        .map((domain) => domain.trim().toLowerCase())
-        .filter(Boolean),
-    ),
-  );
-
-  return domains.length > 0 ? domains : undefined;
-}
-
-function clampInteger(value: unknown, min: number, max: number, fallback: number) {
-  const numeric = typeof value === "number" && Number.isFinite(value) ? value : fallback;
-  return Math.min(max, Math.max(min, Math.round(numeric)));
 }
 
 function compactParameters(parameters: Record<string, unknown>): Record<string, JSONValue> {
@@ -720,27 +565,6 @@ function compactParameters(parameters: Record<string, unknown>): Record<string, 
       return true;
     }),
   ) as Record<string, JSONValue>;
-}
-
-function isValidTimezone(value: string) {
-  if (!value) {
-    return false;
-  }
-
-  try {
-    Intl.DateTimeFormat(undefined, { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function createId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 function errorResponse(error: unknown, signal?: AbortSignal) {
