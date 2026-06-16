@@ -122,7 +122,7 @@ export function MessageBubble({
         <div className="assistant-message">
           <MarkdownMessage content={message.content} />
         </div>
-      ) : files.length > 0 ? null : isStreaming ? (
+      ) : files.length > 0 || showThinking ? null : isStreaming ? (
         <div className="py-2">
           <TypingIndicator />
         </div>

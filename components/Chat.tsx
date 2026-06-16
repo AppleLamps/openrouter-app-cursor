@@ -224,14 +224,17 @@ export function Chat() {
     [updateThread],
   );
 
-  const sendMessage = useCallback(
-    (rawContent: string, attachments: ChatAttachment[] = []) => {
-      const content = rawContent.trim();
-      if (!content && attachments.length === 0) {
-        setStatusText("Enter a message or attach a file before sending.");
-        return false;
-      }
-      if (isStreaming || !activeThread) {
+  const startAssistantRequest = useCallback(
+    ({
+      threadId,
+      title,
+      requestMessages,
+    }: {
+      threadId: string;
+      title: string;
+      requestMessages: ChatMessage[];
+    }) => {
+      if (isStreaming) {
         return false;
       }
 
@@ -242,33 +245,19 @@ export function Chat() {
         return false;
       }
 
-      const threadId = activeThread.id;
-      const userMessage: ChatMessage = {
-        id: createId(),
-        role: "user",
-        content,
-        attachments,
-        createdAt: new Date().toISOString(),
-      };
       const assistantMessage: ChatMessage = {
         id: createId(),
         role: "assistant",
         content: "",
         createdAt: new Date().toISOString(),
       };
-      const requestMessages = [...activeThread.messages, userMessage].filter(
-        (message) => message.role === "user" || message.role === "assistant",
-      );
-      const nextTitle = activeThread.messages.some((message) => message.role === "user")
-        ? activeThread.title
-        : createTitleFromMessage(content);
       const now = new Date().toISOString();
 
       setStatusText("");
       setIsStreaming(true);
       updateThread(threadId, (thread) => ({
         ...thread,
-        title: nextTitle,
+        title,
         messages: [...requestMessages, assistantMessage],
         updatedAt: now,
       }));
@@ -381,7 +370,41 @@ export function Chat() {
 
       return true;
     },
-    [activeThread, addAssistantFile, addAssistantSource, isStreaming, settings, updateAssistantMessage, updateThread],
+    [addAssistantFile, addAssistantSource, isStreaming, settings, updateAssistantMessage, updateThread],
+  );
+
+  const sendMessage = useCallback(
+    (rawContent: string, attachments: ChatAttachment[] = []) => {
+      const content = rawContent.trim();
+      if (!content && attachments.length === 0) {
+        setStatusText("Enter a message or attach a file before sending.");
+        return false;
+      }
+      if (!activeThread) {
+        return false;
+      }
+
+      const userMessage: ChatMessage = {
+        id: createId(),
+        role: "user",
+        content,
+        attachments,
+        createdAt: new Date().toISOString(),
+      };
+      const requestMessages = [...activeThread.messages, userMessage].filter(
+        (message) => message.role === "user" || message.role === "assistant",
+      );
+      const nextTitle = activeThread.messages.some((message) => message.role === "user")
+        ? activeThread.title
+        : createTitleFromMessage(content);
+
+      return startAssistantRequest({
+        threadId: activeThread.id,
+        title: nextTitle,
+        requestMessages,
+      });
+    },
+    [activeThread, startAssistantRequest],
   );
 
   const stopStreaming = useCallback(() => {
@@ -494,8 +517,15 @@ export function Chat() {
       }
 
       const assistantIndex = activeThread.messages.findIndex((message) => message.id === assistantMessageId);
-      const previousUserMessage = [...activeThread.messages]
+      if (assistantIndex < 0) {
+        setStatusText("Could not find that response to retry.");
+        return;
+      }
+
+      const requestMessages = activeThread.messages
         .slice(0, assistantIndex)
+        .filter((message) => message.role === "user" || message.role === "assistant");
+      const previousUserMessage = [...requestMessages]
         .reverse()
         .find((message) => message.role === "user");
 
@@ -504,9 +534,13 @@ export function Chat() {
         return;
       }
 
-      sendMessage(previousUserMessage.content, previousUserMessage.attachments ?? []);
+      startAssistantRequest({
+        threadId: activeThread.id,
+        title: activeThread.title,
+        requestMessages,
+      });
     },
-    [activeThread, isStreaming, sendMessage],
+    [activeThread, isStreaming, startAssistantRequest],
   );
 
   return (
@@ -549,7 +583,7 @@ export function Chat() {
               type="button"
               title="More options"
               aria-label="More options"
-              onClick={clearActiveChat}
+              onClick={() => showComingSoon("Chat options")}
               className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)]"
             >
               <MoreHorizontal size={17} aria-hidden="true" />
