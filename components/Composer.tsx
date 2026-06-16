@@ -1,14 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileText, Image as ImageIcon, Paperclip, Send, Square, X } from "lucide-react";
+import {
+  FileText,
+  Image as ImageIcon,
+  Mic,
+  Paperclip,
+  Send,
+  Settings2,
+  SlidersHorizontal,
+  Square,
+  X,
+} from "lucide-react";
 import type { ChatAttachment } from "@/lib/types";
 
 type ComposerProps = {
   isStreaming: boolean;
   disabled?: boolean;
+  model: string;
   onSend: (message: string, attachments?: ChatAttachment[]) => boolean;
   onStop: () => void;
+  onOpenSettings: () => void;
+  onVoice: () => void;
 };
 
 const MAX_ATTACHMENTS = 4;
@@ -21,7 +34,15 @@ const SUPPORTED_MEDIA_TYPES = new Set([
   "application/pdf",
 ]);
 
-export function Composer({ isStreaming, disabled = false, onSend, onStop }: ComposerProps) {
+export function Composer({
+  isStreaming,
+  disabled = false,
+  model,
+  onSend,
+  onStop,
+  onOpenSettings,
+  onVoice,
+}: ComposerProps) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [attachmentError, setAttachmentError] = useState("");
@@ -95,7 +116,7 @@ export function Composer({ isStreaming, disabled = false, onSend, onStop }: Comp
 
   return (
     <form
-      className="composer-safe flex flex-col gap-2"
+      className="composer-safe mx-auto flex max-w-3xl flex-col gap-2"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -121,7 +142,7 @@ export function Composer({ isStreaming, disabled = false, onSend, onStop }: Comp
         </p>
       ) : null}
 
-      <div className="flex items-end gap-2">
+      <div className="rounded-2xl border border-[color:var(--border-strong)] bg-[color:var(--surface)] p-3 shadow-[0_10px_28px_rgba(80,67,52,0.08)]">
         <input
           ref={fileInputRef}
           type="file"
@@ -130,25 +151,14 @@ export function Composer({ isStreaming, disabled = false, onSend, onStop }: Comp
           className="hidden"
           onChange={(event) => void addFiles(event.target.files)}
         />
-        <button
-          type="button"
-          title="Attach image or PDF"
-          aria-label="Attach image or PDF"
-          disabled={disabled || isStreaming || attachments.length >= MAX_ATTACHMENTS}
-          onClick={() => fileInputRef.current?.click()}
-          className="grid min-h-11 min-w-11 place-items-center rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--muted)] transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Paperclip size={18} aria-hidden="true" />
-        </button>
-
-        <label className="min-h-11 flex-1 rounded-[1.4rem] border border-[color:var(--border)] bg-[color:var(--surface)] px-4 py-2.5 shadow-[0_10px_30px_rgba(0,0,0,0.22)]">
+        <label className="block">
           <span className="sr-only">Message</span>
           <textarea
             ref={textareaRef}
             value={value}
             rows={1}
             disabled={disabled}
-            placeholder="Message"
+            placeholder="Write your prompt..."
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -156,34 +166,84 @@ export function Composer({ isStreaming, disabled = false, onSend, onStop }: Comp
                 submit();
               }
             }}
-            className="block max-h-36 min-h-6 w-full resize-none bg-transparent text-base leading-6 text-[color:var(--foreground)] outline-none placeholder:text-[color:var(--muted)] disabled:opacity-60"
+            className="block max-h-40 min-h-10 w-full resize-none bg-transparent text-base leading-6 text-[color:var(--foreground)] outline-none placeholder:text-[color:var(--muted)] disabled:opacity-60"
           />
         </label>
 
-        {isStreaming ? (
+        <div className="flex items-center justify-between gap-3 pt-2">
           <button
             type="button"
-            title="Stop generating"
-            aria-label="Stop generating"
-            onClick={onStop}
-            className="grid min-h-11 min-w-11 place-items-center rounded-full bg-[color:var(--danger)] text-[color:var(--background)] transition active:scale-95"
+            title="Attach image or PDF"
+            aria-label="Attach image or PDF"
+            disabled={disabled || isStreaming || attachments.length >= MAX_ATTACHMENTS}
+            onClick={() => fileInputRef.current?.click()}
+            className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--foreground)] transition hover:bg-[color:var(--surface-muted)] disabled:cursor-not-allowed disabled:opacity-45"
           >
-            <Square size={17} fill="currentColor" aria-hidden="true" />
+            <Paperclip size={18} aria-hidden="true" />
           </button>
-        ) : (
-          <button
-            type="submit"
-            title="Send"
-            aria-label="Send"
-            disabled={disabled || (!value.trim() && attachments.length === 0)}
-            className="grid min-h-11 min-w-11 place-items-center rounded-full bg-[color:var(--accent-strong)] text-[color:var(--background)] transition active:scale-95 disabled:cursor-not-allowed disabled:bg-[color:var(--surface-muted)] disabled:text-[color:var(--muted)]"
-          >
-            <Send size={18} aria-hidden="true" />
-          </button>
-        )}
+
+          <div className="flex min-w-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="hidden min-w-0 items-center gap-1 rounded-full px-2 py-1.5 text-sm text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)] sm:inline-flex"
+            >
+              <span className="truncate">{formatModelLabel(model)}</span>
+              <SlidersHorizontal size={14} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              title="Settings"
+              aria-label="Settings"
+              onClick={onOpenSettings}
+              className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)]"
+            >
+              <Settings2 size={17} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              title="Voice input"
+              aria-label="Voice input"
+              onClick={onVoice}
+              className="grid h-9 w-9 place-items-center rounded-full text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)]"
+            >
+              <Mic size={17} aria-hidden="true" />
+            </button>
+            {isStreaming ? (
+              <button
+                type="button"
+                title="Stop generating"
+                aria-label="Stop generating"
+                onClick={onStop}
+                className="grid h-9 w-9 place-items-center rounded-full bg-[color:var(--danger)] text-white transition active:scale-95"
+              >
+                <Square size={15} fill="currentColor" aria-hidden="true" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                title="Send"
+                aria-label="Send"
+                disabled={disabled || (!value.trim() && attachments.length === 0)}
+                className="grid h-9 w-9 place-items-center rounded-full bg-[color:var(--foreground)] text-[color:var(--background)] transition active:scale-95 disabled:cursor-not-allowed disabled:bg-[color:var(--surface-muted)] disabled:text-[color:var(--muted)]"
+              >
+                <Send size={17} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
+
+      <p className="text-center text-xs text-[color:var(--muted)]">
+        AI can make mistakes. Please double-check responses.
+      </p>
     </form>
   );
+}
+
+function formatModelLabel(model: string) {
+  const label = model.split("/").pop() || model;
+  return label.length > 22 ? `${label.slice(0, 19)}...` : label;
 }
 
 function AttachmentPreview({

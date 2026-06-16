@@ -38,6 +38,7 @@ export type ChatThread = {
   messages: ChatMessage[];
   createdAt: string;
   updatedAt: string;
+  starred?: boolean;
 };
 
 export type ChatSettings = {

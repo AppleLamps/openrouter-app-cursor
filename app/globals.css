@@ -1,17 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: dark;
-  --background: #08090a;
-  --surface: #101214;
-  --surface-raised: #171a1d;
-  --surface-muted: #202428;
-  --foreground: #f6f2ea;
-  --muted: #aaa397;
-  --border: rgba(246, 242, 234, 0.12);
-  --accent: #77e0ba;
-  --accent-strong: #b9f67b;
-  --danger: #ff7b7b;
+  color-scheme: light;
+  --background: #fbfaf7;
+  --sidebar: #f0eee7;
+  --surface: #ffffff;
+  --surface-raised: #f8f5ef;
+  --surface-muted: #eeeae1;
+  --user-bubble: #efeee9;
+  --foreground: #26221c;
+  --muted: #736d64;
+  --border: rgba(38, 34, 28, 0.11);
+  --border-strong: rgba(38, 34, 28, 0.18);
+  --accent: #8f4f2f;
+  --accent-strong: #d96c42;
+  --brand: #d96c42;
+  --danger: #b43b35;
 }
 
 * {
@@ -57,16 +61,14 @@ select:focus-visible {
 .app-shell {
   height: 100dvh;
   min-height: 100svh;
-  padding-top: max(0.75rem, env(safe-area-inset-top));
-  padding-right: max(0.75rem, env(safe-area-inset-right));
-  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding: 0;
   background: var(--background);
 }
 
 .composer-safe {
-  padding-right: max(0.75rem, env(safe-area-inset-right));
-  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
-  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
 }
 
 .modal-safe {
@@ -78,7 +80,7 @@ select:focus-visible {
 
 .scroll-area {
   scrollbar-width: thin;
-  scrollbar-color: rgba(246, 242, 234, 0.22) transparent;
+  scrollbar-color: rgba(38, 34, 28, 0.22) transparent;
 }
 
 .scroll-area::-webkit-scrollbar {
@@ -86,8 +88,55 @@ select:focus-visible {
 }
 
 .scroll-area::-webkit-scrollbar-thumb {
-  background: rgba(246, 242, 234, 0.22);
+  background: rgba(38, 34, 28, 0.22);
   border-radius: 999px;
+}
+
+.assistant-message {
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+  font-size: 1.06rem;
+  line-height: 1.78;
+  color: var(--foreground);
+}
+
+.assistant-message strong {
+  font-weight: 700;
+}
+
+.assistant-message h1,
+.assistant-message h2,
+.assistant-message h3 {
+  margin: 1.4rem 0 0.5rem;
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+  line-height: 1.2;
+}
+
+.assistant-message h1 {
+  font-size: 1.75rem;
+}
+
+.assistant-message h2 {
+  font-size: 1.45rem;
+}
+
+.assistant-message h3 {
+  font-size: 1.2rem;
+}
+
+.brand-burst {
+  display: inline-block;
+  font-family:
+    Georgia,
+    "Times New Roman",
+    serif;
+  line-height: 1;
+  transform: rotate(8deg);
 }
 
 .rich-code pre {

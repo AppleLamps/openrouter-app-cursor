@@ -15,7 +15,10 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          p: ({ children }) => <p className="mb-3 last:mb-0">{children}</p>,
+          h1: ({ children }) => <h1>{children}</h1>,
+          h2: ({ children }) => <h2>{children}</h2>,
+          h3: ({ children }) => <h3>{children}</h3>,
+          p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
           a: ({ children, href }) => (
             <a
               href={href}
@@ -26,9 +29,9 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
               {children}
             </a>
           ),
-          ul: ({ children }) => <ul className="mb-3 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
-          ol: ({ children }) => <ol className="mb-3 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
-          li: ({ children }) => <li className="pl-1">{children}</li>,
+          ul: ({ children }) => <ul className="mb-4 list-disc space-y-1.5 pl-5 last:mb-0">{children}</ul>,
+          ol: ({ children }) => <ol className="mb-4 list-decimal space-y-1.5 pl-5 last:mb-0">{children}</ol>,
+          li: ({ children }) => <li className="pl-1.5">{children}</li>,
           blockquote: ({ children }) => (
             <blockquote className="mb-3 border-l-2 border-[color:var(--accent)]/60 pl-3 text-[color:var(--muted)] last:mb-0">
               {children}
@@ -53,7 +56,7 @@ export function MarkdownMessage({ content }: MarkdownMessageProps) {
             }
 
             return (
-              <code className="rounded-md bg-black/35 px-1.5 py-0.5 text-[0.88em] text-[color:var(--accent)]">
+              <code className="rounded-md bg-[color:var(--surface-muted)] px-1.5 py-0.5 font-sans text-[0.88em] text-[color:var(--accent)]">
                 {children}
               </code>
             );
@@ -99,15 +102,15 @@ function MermaidBlock({ code }: { code: string }) {
         mermaid.initialize({
           startOnLoad: false,
           securityLevel: "strict",
-          theme: "dark",
+          theme: "base",
           themeVariables: {
-            background: "#070808",
-            primaryColor: "#202428",
-            primaryTextColor: "#f6f2ea",
-            primaryBorderColor: "#77e0ba",
-            lineColor: "#aaa397",
-            secondaryColor: "#171a1d",
-            tertiaryColor: "#101214",
+            background: "#fbfaf7",
+            primaryColor: "#f8f5ef",
+            primaryTextColor: "#26221c",
+            primaryBorderColor: "#d96c42",
+            lineColor: "#736d64",
+            secondaryColor: "#efeee9",
+            tertiaryColor: "#ffffff",
           },
         });
         mermaid.setParseErrorHandler(() => undefined);
@@ -226,7 +229,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
         const safeLanguage = requestedLanguage in bundledLanguages ? requestedLanguage : "text";
         const html = await codeToHtml(code, {
           lang: safeLanguage,
-          theme: "github-dark",
+          theme: "github-light",
         });
 
         if (!cancelled) {
@@ -257,7 +260,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
   }
 
   return (
-    <div className="mb-3 overflow-hidden rounded-lg border border-[color:var(--border)] bg-[#070808] last:mb-0">
+    <div className="mb-3 overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] font-sans last:mb-0">
       <BlockHeader label={language || "code"} copied={copied} onCopy={copyCode} />
       {highlightError ? <RenderError message={highlightError} /> : null}
       {highlightedHtml ? (
@@ -266,7 +269,7 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       ) : (
-        <pre className="scroll-area overflow-x-auto p-3 text-[0.84rem] leading-5 text-[#f7f1e8]">
+        <pre className="scroll-area overflow-x-auto p-3 text-[0.84rem] leading-5 text-[color:var(--foreground)]">
           <code>{code}</code>
         </pre>
       )}
@@ -300,7 +303,7 @@ function RenderedPanel({
   }
 
   return (
-    <div className="mb-3 overflow-hidden rounded-lg border border-[color:var(--border)] bg-[#070808] last:mb-0">
+    <div className="mb-3 overflow-hidden rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] font-sans last:mb-0">
       <BlockHeader label={label} copied={copied} onCopy={copyCode} />
       {error ? <RenderError message={error} /> : null}
       {loading ? (
@@ -310,7 +313,7 @@ function RenderedPanel({
       ) : null}
       <div className={error ? "hidden" : undefined}>{body}</div>
       {error ? (
-        <pre className="scroll-area max-h-64 overflow-auto border-t border-[color:var(--border)] p-3 text-[0.8rem] leading-5 text-[#f7f1e8]">
+        <pre className="scroll-area max-h-64 overflow-auto border-t border-[color:var(--border)] p-3 text-[0.8rem] leading-5 text-[color:var(--foreground)]">
           <code>{code}</code>
         </pre>
       ) : null}

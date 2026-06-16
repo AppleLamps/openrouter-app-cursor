@@ -324,6 +324,7 @@ function normalizeThread(thread: ChatThread): ChatThread {
     ...thread,
     title: thread.title.trim() || titleFromMessages(messages),
     messages,
+    starred: Boolean(thread.starred),
   };
 }
 
@@ -377,6 +378,7 @@ export function loadThreads(): ChatThread[] {
     messages: legacyMessages,
     createdAt: legacyMessages[0]?.createdAt ?? now,
     updatedAt: now,
+    starred: false,
   };
 
   saveThreads([migratedThread]);

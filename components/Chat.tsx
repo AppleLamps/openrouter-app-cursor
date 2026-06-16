@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Menu, Settings, Trash2 } from "lucide-react";
+import { Menu, MoreHorizontal, Share2 } from "lucide-react";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { Composer } from "@/components/Composer";
 import { MessageBubble } from "@/components/MessageBubble";
@@ -62,6 +62,7 @@ export function Chat() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [noticeText, setNoticeText] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -437,6 +438,17 @@ export function Chat() {
     [activeThreadId],
   );
 
+  const toggleThreadStarred = useCallback(
+    (threadId: string) => {
+      updateThread(threadId, (thread) => ({
+        ...thread,
+        starred: !thread.starred,
+        updatedAt: new Date().toISOString(),
+      }));
+    },
+    [updateThread],
+  );
+
   const clearActiveChat = useCallback(() => {
     abortRef.current?.abort();
     if (!activeThread) {
@@ -459,6 +471,44 @@ export function Chat() {
     setApiStatusText("API key missing");
   }, []);
 
+  const showComingSoon = useCallback((label: string) => {
+    setNoticeText(`${label} is coming soon.`);
+    window.setTimeout(() => setNoticeText(""), 1800);
+  }, []);
+
+  const renameActiveThread = useCallback(() => {
+    if (!activeThread) {
+      return;
+    }
+
+    const title = window.prompt("Rename chat", activeThread.title);
+    if (title !== null) {
+      renameThread(activeThread.id, title);
+    }
+  }, [activeThread, renameThread]);
+
+  const retryAssistantMessage = useCallback(
+    (assistantMessageId: string) => {
+      if (!activeThread || isStreaming) {
+        return;
+      }
+
+      const assistantIndex = activeThread.messages.findIndex((message) => message.id === assistantMessageId);
+      const previousUserMessage = [...activeThread.messages]
+        .slice(0, assistantIndex)
+        .reverse()
+        .find((message) => message.role === "user");
+
+      if (!previousUserMessage) {
+        setStatusText("No previous user message to retry.");
+        return;
+      }
+
+      sendMessage(previousUserMessage.content, previousUserMessage.attachments ?? []);
+    },
+    [activeThread, isStreaming, sendMessage],
+  );
+
   return (
     <main className="app-shell flex overflow-hidden">
       <ChatSidebar
@@ -472,52 +522,54 @@ export function Chat() {
         onSelectThread={selectThread}
         onRenameThread={renameThread}
         onDeleteThread={deleteThread}
+        onToggleStarred={toggleThreadStarred}
+        onComingSoon={showComingSoon}
       />
 
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--border)] pb-3 lg:pl-3">
-          <div className="flex min-w-0 items-center gap-2">
+      <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[color:var(--background)]">
+        <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-[color:var(--border)] px-3 md:px-5">
+          <div className="flex min-w-0 items-center gap-1.5">
             <button
               type="button"
               title="Open sidebar"
               aria-label="Open sidebar"
               onClick={() => setSidebarOpen(true)}
-              className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--muted)] transition active:scale-95 lg:hidden"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)] lg:hidden"
             >
-              <Menu size={18} aria-hidden="true" />
+              <Menu size={17} aria-hidden="true" />
             </button>
-            <div className="min-w-0">
-              <h1 className="truncate text-[1.05rem] font-semibold leading-tight text-[color:var(--foreground)]">
-                {activeThread?.title || "OpenRouter Chat"}
-              </h1>
-              <p className="truncate text-xs text-[color:var(--muted)]">{settings.model}</p>
-            </div>
+            <button
+              type="button"
+              onClick={renameActiveThread}
+              className="min-w-0 truncate rounded-lg px-2 py-1 text-left text-sm font-semibold text-[color:var(--foreground)] hover:bg-[color:var(--surface-muted)]"
+            >
+              {activeThread?.title || "New chat"}
+            </button>
+            <button
+              type="button"
+              title="More options"
+              aria-label="More options"
+              onClick={clearActiveChat}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[color:var(--muted)] hover:bg-[color:var(--surface-muted)]"
+            >
+              <MoreHorizontal size={17} aria-hidden="true" />
+            </button>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
               type="button"
-              title="Clear chat"
-              aria-label="Clear chat"
-              onClick={clearActiveChat}
-              className="grid min-h-11 min-w-11 place-items-center rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] text-[color:var(--muted)] transition active:scale-95"
+              onClick={() => showComingSoon("Share")}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface)] px-3 text-sm font-medium text-[color:var(--foreground)] hover:bg-[color:var(--surface-muted)]"
             >
-              <Trash2 size={18} aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              title="Settings"
-              aria-label="Settings"
-              onClick={() => setIsSettingsOpen(true)}
-              className="grid min-h-11 min-w-11 place-items-center rounded-full bg-[color:var(--foreground)] text-[color:var(--background)] transition active:scale-95"
-            >
-              <Settings size={18} aria-hidden="true" />
+              <Share2 size={14} aria-hidden="true" />
+              Share
             </button>
           </div>
         </header>
 
         <section
           ref={scrollRef}
-          className="scroll-area min-h-0 flex-1 overflow-y-auto px-0 py-4 lg:pl-3"
+          className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-8"
           aria-label="Chat messages"
         >
           {!hydrated ? (
@@ -525,39 +577,59 @@ export function Chat() {
               Loading chat...
             </div>
           ) : visibleMessages.length === 0 ? (
-            <div className="flex min-h-full items-center justify-center px-7 text-center">
-              <div>
-                <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-[color:var(--surface-raised)] text-2xl">
-                  OR
+            <div className="flex min-h-full items-center justify-center px-2 pb-20 text-center">
+              <div className="w-full max-w-3xl">
+                <div className="mb-8 flex items-center justify-center gap-3">
+                  <span className="brand-burst text-4xl text-[color:var(--brand)]" aria-hidden="true">
+                    *
+                  </span>
+                  <h1 className="font-serif text-4xl leading-tight text-[color:var(--foreground)] md:text-5xl">
+                    Lamps returns!
+                  </h1>
                 </div>
-                <p className="text-base font-medium text-[color:var(--foreground)]">Start a conversation.</p>
-                <p className="mt-2 text-sm leading-6 text-[color:var(--muted)]">
-                  Messages stay on this device until you clear them.
+                <p className="mx-auto max-w-md text-sm text-[color:var(--muted)]">
+                  Draft an email, plan a project, summarize a document, or keep a thought moving.
                 </p>
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              {visibleMessages.map((message) => (
+            <div className="mx-auto w-full max-w-3xl space-y-10">
+              {visibleMessages.map((message, index) => (
                 <MessageBubble
                   key={message.id}
                   message={message}
                   isStreaming={isStreaming && message.id === visibleMessages.at(-1)?.id}
+                  onRetry={message.role === "assistant" ? () => retryAssistantMessage(message.id) : undefined}
+                  showThinking={message.role === "assistant" && index === visibleMessages.length - 1 && isStreaming}
                 />
               ))}
             </div>
           )}
         </section>
 
-        <div className="-mx-[max(0.75rem,env(safe-area-inset-left))] shrink-0 border-t border-[color:var(--border)] bg-[color:var(--background)]/95 pt-3 backdrop-blur lg:ml-0">
+        <div className="shrink-0 bg-gradient-to-t from-[color:var(--background)] via-[color:var(--background)] to-transparent px-4 pb-3 md:px-8">
           {statusText ? (
-            <p className="composer-safe pb-2 text-xs text-[color:var(--muted)]" role="status">
+            <p className="mx-auto max-w-3xl pb-2 text-xs text-[color:var(--muted)]" role="status">
               {statusText}
             </p>
           ) : null}
-          <Composer onSend={sendMessage} onStop={stopStreaming} isStreaming={isStreaming} disabled={!hydrated} />
+          <Composer
+            onSend={sendMessage}
+            onStop={stopStreaming}
+            isStreaming={isStreaming}
+            disabled={!hydrated}
+            model={settings.model}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onVoice={() => showComingSoon("Voice input")}
+          />
         </div>
       </section>
+
+      {noticeText ? (
+        <div className="fixed bottom-5 left-1/2 z-[80] -translate-x-1/2 rounded-full border border-[color:var(--border)] bg-[color:var(--foreground)] px-4 py-2 text-sm text-[color:var(--background)] shadow-[0_10px_30px_rgba(80,67,52,0.16)]">
+          {noticeText}
+        </div>
+      ) : null}
 
       <SettingsModal
         open={isSettingsOpen}
@@ -590,6 +662,7 @@ function createEmptyThread(): ChatThread {
     messages: [],
     createdAt: now,
     updatedAt: now,
+    starred: false,
   };
 }
 
