@@ -19,6 +19,7 @@ import {
   Search,
   Trash2,
   Upload,
+  UserRound,
 } from "lucide-react";
 import {
   DEFAULT_MESSAGE_TRANSFORMS,
@@ -91,59 +92,89 @@ export function SetupSettingsSection({
     onValidateApiKey("");
   }
 
-  return (
-    <SectionCard title="API key" description="Save your OpenRouter key locally on this device. It is sent only to local route handlers." icon={<KeyRound size={18} aria-hidden="true" />}>
-      <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-(--border) bg-(--background) px-3 py-2">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">Current status</p>
-          <p className="truncate text-xs text-(--muted)">{savedKeyLabel || apiStatusLabel(apiStatus)}</p>
-        </div>
-        <button
-          type="button"
-          title="Validate API key"
-          aria-label="Validate API key"
-          onClick={() => onValidateApiKey()}
-          className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-full bg-(--surface-muted) text-(--foreground) transition active:scale-95"
-        >
-          <RefreshCw size={17} aria-hidden="true" />
-        </button>
-      </div>
+  function updateDisplayName(displayName: string) {
+    onSettingsChange({
+      ...settings,
+      profile: {
+        ...settings.profile,
+        displayName,
+      },
+    });
+  }
 
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <label className="min-w-0 flex-1">
-          <span className="sr-only">OpenRouter API key</span>
+  return (
+    <div className="space-y-4">
+      <SectionCard title="Profile" description="Personalize this browser without changing the shared app code." icon={<UserRound size={18} aria-hidden="true" />}>
+        <label className="block">
+          <span className="mb-2 block text-sm font-medium">Display name</span>
           <div className="flex min-h-12 items-center gap-2 rounded-xl border border-(--border) bg-(--background) px-3">
-            <KeyRound size={17} className="shrink-0 text-(--muted)" aria-hidden="true" />
+            <UserRound size={17} className="shrink-0 text-(--muted)" aria-hidden="true" />
             <input
-              value={draftApiKey}
-              type="password"
-              spellCheck={false}
-              autoCapitalize="off"
-              autoCorrect="off"
-              placeholder="sk-or-..."
-              onChange={(event) => setDraftApiKey(event.target.value)}
+              value={settings.profile.displayName}
+              type="text"
+              autoCapitalize="words"
+              autoComplete="name"
+              placeholder="Your name"
+              onChange={(event) => updateDisplayName(event.target.value)}
               className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-(--muted)"
             />
           </div>
         </label>
-        <button
-          type="button"
-          onClick={saveApiKey}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-(--accent-strong) px-4 text-sm font-medium text-(--background) transition active:scale-[0.98]"
-        >
-          <Check size={17} aria-hidden="true" />
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={removeApiKey}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-(--border) px-4 text-sm font-medium text-(--foreground) transition active:scale-[0.98]"
-        >
-          <Trash2 size={17} aria-hidden="true" />
-          Remove
-        </button>
-      </div>
-    </SectionCard>
+      </SectionCard>
+
+      <SectionCard title="API key" description="Save your OpenRouter key locally on this device. It is sent only to local route handlers." icon={<KeyRound size={18} aria-hidden="true" />}>
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-(--border) bg-(--background) px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Current status</p>
+            <p className="truncate text-xs text-(--muted)">{savedKeyLabel || apiStatusLabel(apiStatus)}</p>
+          </div>
+          <button
+            type="button"
+            title="Validate API key"
+            aria-label="Validate API key"
+            onClick={() => onValidateApiKey()}
+            className="grid min-h-11 min-w-11 shrink-0 place-items-center rounded-full bg-(--surface-muted) text-(--foreground) transition active:scale-95"
+          >
+            <RefreshCw size={17} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">OpenRouter API key</span>
+            <div className="flex min-h-12 items-center gap-2 rounded-xl border border-(--border) bg-(--background) px-3">
+              <KeyRound size={17} className="shrink-0 text-(--muted)" aria-hidden="true" />
+              <input
+                value={draftApiKey}
+                type="password"
+                spellCheck={false}
+                autoCapitalize="off"
+                autoCorrect="off"
+                placeholder="sk-or-..."
+                onChange={(event) => setDraftApiKey(event.target.value)}
+                className="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-(--muted)"
+              />
+            </div>
+          </label>
+          <button
+            type="button"
+            onClick={saveApiKey}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-(--accent-strong) px-4 text-sm font-medium text-(--background) transition active:scale-[0.98]"
+          >
+            <Check size={17} aria-hidden="true" />
+            Save
+          </button>
+          <button
+            type="button"
+            onClick={removeApiKey}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-(--border) px-4 text-sm font-medium text-(--foreground) transition active:scale-[0.98]"
+          >
+            <Trash2 size={17} aria-hidden="true" />
+            Remove
+          </button>
+        </div>
+      </SectionCard>
+    </div>
   );
 }
 

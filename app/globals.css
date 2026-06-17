@@ -58,6 +58,10 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+.composer-safe textarea:focus-visible {
+  outline: none;
+}
+
 .app-shell {
   height: 100dvh;
   min-height: 100svh;

@@ -29,6 +29,7 @@ type FilteredThread = {
 type ChatSidebarProps = {
   threads: ChatThread[];
   activeThreadId: string;
+  displayName: string;
   collapsed: boolean;
   mobileOpen: boolean;
   onToggleCollapsed: () => void;
@@ -44,6 +45,7 @@ type ChatSidebarProps = {
 export function ChatSidebar({
   threads,
   activeThreadId,
+  displayName,
   collapsed,
   mobileOpen,
   onToggleCollapsed,
@@ -82,6 +84,8 @@ export function ChatSidebar({
       }));
   }, [query, sortedThreads]);
   const starredThreads = filteredThreads.filter(({ thread }) => thread.starred);
+  const profileLabel = displayName.trim() || "Guest";
+  const initials = createInitials(profileLabel);
 
   return (
     <>
@@ -110,7 +114,7 @@ export function ChatSidebar({
             className="inline-flex min-w-0 items-center gap-2 rounded-md px-1 py-1 text-left text-lg font-semibold text-(--foreground)"
           >
             <Sparkles size={19} className="text-(--brand)" aria-hidden="true" />
-            {!collapsed ? <span className="truncate font-serif text-[1.35rem]">Lamps</span> : null}
+            {!collapsed ? <span className="truncate font-serif text-[1.35rem]">OpenRouter</span> : null}
           </button>
           <div className="ml-auto flex items-center gap-1">
             <button
@@ -229,11 +233,11 @@ export function ChatSidebar({
               className="flex w-full items-center gap-2 rounded-md p-1.5 text-left hover:bg-(--surface)"
             >
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-(--foreground) text-xs font-semibold text-(--background)">
-                AL
+                {initials}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">Apple Lamps</span>
-                <span className="block truncate text-xs text-(--muted)">Max plan</span>
+                <span className="block truncate text-sm font-medium">{profileLabel}</span>
+                <span className="block truncate text-xs text-(--muted)">Local profile</span>
               </span>
               <ChevronDown size={15} className="text-(--muted)" aria-hidden="true" />
             </button>
@@ -242,6 +246,17 @@ export function ChatSidebar({
       </aside>
     </>
   );
+}
+
+function createInitials(name: string) {
+  const initials = name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  return initials || "G";
 }
 
 function SidebarAction({

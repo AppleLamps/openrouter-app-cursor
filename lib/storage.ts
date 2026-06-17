@@ -16,6 +16,7 @@ import {
   normalizeReasoning,
   normalizeResponseCaching,
   normalizeServerTools,
+  normalizeUserProfile,
 } from "@/lib/validation";
 import { createId } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ function normalizeSettings(value: unknown): ChatSettings {
       typeof settings.apiKey === "string" && settings.apiKey.trim()
         ? settings.apiKey.trim()
         : undefined,
+    profile: normalizeUserProfile(settings.profile),
     model:
       typeof settings.model === "string" && settings.model.trim()
         ? settings.model.trim()

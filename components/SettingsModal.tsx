@@ -30,7 +30,7 @@ type SettingsModalProps = {
 type SettingsSectionId = "setup" | "model" | "tools" | "data";
 
 const SETTINGS_SECTIONS: { id: SettingsSectionId; label: string; description: string }[] = [
-  { id: "setup", label: "Setup", description: "API key" },
+  { id: "setup", label: "Setup", description: "Profile/key" },
   { id: "model", label: "Model", description: "Behavior" },
   { id: "tools", label: "Tools", description: "Features" },
   { id: "data", label: "Data", description: "Backup" },

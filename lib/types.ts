@@ -52,6 +52,7 @@ export type ChatThread = {
 
 export type ChatSettings = {
   apiKey?: string;
+  profile: UserProfileSettings;
   model: string;
   systemPrompt: string;
   temperature: number;
@@ -61,6 +62,10 @@ export type ChatSettings = {
   responseCaching: ResponseCachingSettings;
   reasoning: ReasoningSettings;
   providerRouting: ProviderRoutingSettings;
+};
+
+export type UserProfileSettings = {
+  displayName: string;
 };
 
 export type SearchEngine = "auto" | "native" | "exa" | "firecrawl" | "parallel" | "perplexity";
@@ -210,7 +215,12 @@ export const DEFAULT_PROVIDER_ROUTING: ProviderRoutingSettings = {
   dataCollectionDeny: false,
 };
 
+export const DEFAULT_PROFILE_SETTINGS: UserProfileSettings = {
+  displayName: "",
+};
+
 export const DEFAULT_SETTINGS: ChatSettings = {
+  profile: DEFAULT_PROFILE_SETTINGS,
   model: DEFAULT_MODEL,
   systemPrompt: "You are a concise, helpful assistant.",
   temperature: 0.7,

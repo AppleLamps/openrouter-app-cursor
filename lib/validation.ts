@@ -1,6 +1,7 @@
 import {
   DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MULTIMODAL_SETTINGS,
+  DEFAULT_PROFILE_SETTINGS,
   DEFAULT_PROVIDER_ROUTING,
   DEFAULT_REASONING,
   DEFAULT_RESPONSE_CACHING,
@@ -22,6 +23,7 @@ import {
   type SearchEngine,
   type ServerToolSettings,
   type ChatThread,
+  type UserProfileSettings,
 } from "@/lib/types";
 
 export function isChatMessage(value: unknown): value is ChatMessage {
@@ -176,6 +178,20 @@ export function normalizeDomainsForApi(value: unknown): string[] | undefined {
 export function clampNumber(value: unknown, min: number, max: number, fallback: number) {
   const numeric = typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return Math.min(max, Math.max(min, Math.round(numeric)));
+}
+
+export function normalizeUserProfile(value: unknown): UserProfileSettings {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_PROFILE_SETTINGS;
+  }
+
+  const profile = value as Partial<UserProfileSettings>;
+  return {
+    displayName:
+      typeof profile.displayName === "string"
+        ? profile.displayName.replace(/\s+/g, " ").trim().slice(0, 80)
+        : DEFAULT_PROFILE_SETTINGS.displayName,
+  };
 }
 
 export function isValidTimezone(value: string) {

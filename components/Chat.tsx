@@ -97,6 +97,7 @@ export function Chat() {
   const threadsRef = useRef<ChatThread[]>([]);
   const autoTitleTimeoutRef = useRef<number | null>(null);
   const scheduleAutoTitleRef = useRef<(threadId: string) => void>(() => { });
+  const onboardingShownRef = useRef(false);
 
   const setStreamingActive = useCallback((active: boolean) => {
     isStreamingRef.current = active;
@@ -168,6 +169,8 @@ export function Chat() {
     () => messages.filter((message) => message.role !== "system"),
     [messages],
   );
+  const displayName = settings.profile.displayName.trim();
+  const firstName = displayName.split(" ").filter(Boolean)[0] || "";
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -175,6 +178,17 @@ export function Chat() {
       behavior: visibleMessages.length > 2 ? "smooth" : "auto",
     });
   }, [visibleMessages.length, isStreaming, streamingDraft?.content]);
+
+  useEffect(() => {
+    if (!hydrated || onboardingShownRef.current) {
+      return;
+    }
+
+    if (!settings.apiKey?.trim() || !displayName) {
+      onboardingShownRef.current = true;
+      setIsSettingsOpen(true);
+    }
+  }, [displayName, hydrated, settings.apiKey]);
 
   const refreshApiStatus = useCallback(
     async (apiKeyOverride?: string) => {
@@ -876,6 +890,7 @@ export function Chat() {
       <ChatSidebar
         threads={threads}
         activeThreadId={activeThreadId}
+        displayName={displayName}
         collapsed={sidebarCollapsed}
         mobileOpen={sidebarOpen}
         onToggleCollapsed={() => setSidebarCollapsed((current) => !current)}
@@ -941,7 +956,7 @@ export function Chat() {
                   *
                 </span>
                 <h1 className="font-serif text-4xl leading-tight text-(--foreground) md:text-[2.75rem]">
-                  Lamps returns!
+                  {firstName ? `Welcome, ${firstName}` : "Welcome"}
                 </h1>
               </div>
               <p className="mx-auto mb-6 max-w-md text-center text-sm text-(--muted)">
@@ -1011,7 +1026,7 @@ export function Chat() {
                 isStreaming={isStreaming}
                 disabled={!hydrated}
                 model={settings.model}
-                placeholder="Reply to Lamps…"
+                placeholder="Reply..."
                 onOpenSettings={() => setIsSettingsOpen(true)}
                 onVoice={() => showComingSoon("Voice input")}
               />
