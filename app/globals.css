@@ -50,16 +50,9 @@ select {
   font: inherit;
 }
 
-button:focus-visible,
-textarea:focus-visible,
-input:focus-visible,
-select:focus-visible {
+button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-.composer-safe textarea:focus-visible {
-  outline: none;
 }
 
 .app-shell {
@@ -147,12 +140,15 @@ select:focus-visible {
 
 .rich-code pre {
   margin: 0;
-  min-width: max-content;
-  overflow-x: auto;
   padding: 0.75rem;
   background: transparent !important;
   font-size: 0.84rem;
   line-height: 1.25rem;
+  /* Override Shiki's inline overflow-x:auto and white-space:pre */
+  overflow-x: visible !important;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 
 .rich-code code {
@@ -163,6 +159,9 @@ select:focus-visible {
     Consolas,
     "Liberation Mono",
     monospace;
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 
 .rich-render {

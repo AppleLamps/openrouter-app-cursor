@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import { FileText, FolderKanban, Lightbulb, Mail, Menu, MoreHorizontal, Share2 } from "lucide-react";
 import { ChatSidebar } from "@/components/ChatSidebar";
@@ -72,6 +72,8 @@ type StreamingDraft = {
 };
 
 const THREADS_SAVE_DEBOUNCE_MS = 750;
+const STREAMING_DRAFT_FLUSH_MS = 33;
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 96;
 
 export function Chat() {
   const [hydrated, setHydrated] = useState(false);
@@ -91,9 +93,15 @@ export function Chat() {
   const [composerSeed, setComposerSeed] = useState<{ id: string; text: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const autoScrollPinnedRef = useRef(true);
+  const scrollFrameRef = useRef<number | null>(null);
+  const pendingScrollBehaviorRef = useRef<ScrollBehavior>("auto");
+  const lastScrollTargetRef = useRef({ threadId: "", messageCount: 0 });
   const isStreamingRef = useRef(false);
   const streamingDraftRef = useRef<StreamingDraft | null>(null);
   const streamingFrameRef = useRef<number | null>(null);
+  const streamingTimeoutRef = useRef<number | null>(null);
+  const streamingLastFlushRef = useRef(0);
   const threadsRef = useRef<ChatThread[]>([]);
   const autoTitleTimeoutRef = useRef<number | null>(null);
   const scheduleAutoTitleRef = useRef<(threadId: string) => void>(() => { });
@@ -161,6 +169,15 @@ export function Chat() {
       if (autoTitleTimeoutRef.current) {
         window.clearTimeout(autoTitleTimeoutRef.current);
       }
+      if (scrollFrameRef.current !== null) {
+        cancelAnimationFrame(scrollFrameRef.current);
+      }
+      if (streamingFrameRef.current !== null) {
+        cancelAnimationFrame(streamingFrameRef.current);
+      }
+      if (streamingTimeoutRef.current !== null) {
+        window.clearTimeout(streamingTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -172,12 +189,72 @@ export function Chat() {
   const displayName = settings.profile.displayName.trim();
   const firstName = displayName.split(" ").filter(Boolean)[0] || "";
 
-  useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: visibleMessages.length > 2 ? "smooth" : "auto",
+  const scheduleScrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    pendingScrollBehaviorRef.current = behavior;
+
+    if (scrollFrameRef.current !== null) {
+      return;
+    }
+
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+
+      const scrollElement = scrollRef.current;
+      if (!scrollElement) {
+        return;
+      }
+
+      scrollElement.scrollTo({
+        top: scrollElement.scrollHeight,
+        behavior: pendingScrollBehaviorRef.current,
+      });
+      autoScrollPinnedRef.current = true;
     });
-  }, [visibleMessages.length, isStreaming, streamingDraft?.content]);
+  }, []);
+
+  const handleMessageScroll = useCallback(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+
+    autoScrollPinnedRef.current = isScrollNearBottom(scrollElement);
+  }, []);
+
+  useLayoutEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+
+    const target = lastScrollTargetRef.current;
+    const threadChanged = activeThreadId !== target.threadId;
+    const messageCountChanged = visibleMessages.length !== target.messageCount;
+    lastScrollTargetRef.current = { threadId: activeThreadId, messageCount: visibleMessages.length };
+
+    if (threadChanged) {
+      autoScrollPinnedRef.current = true;
+      scheduleScrollToBottom("auto");
+      return;
+    }
+
+    if (messageCountChanged) {
+      autoScrollPinnedRef.current = true;
+      scheduleScrollToBottom(!isStreaming && visibleMessages.length > 2 ? "smooth" : "auto");
+      return;
+    }
+
+    if (isStreaming && autoScrollPinnedRef.current) {
+      scheduleScrollToBottom("auto");
+    }
+  }, [
+    activeThreadId,
+    isStreaming,
+    scheduleScrollToBottom,
+    streamingDraft?.content,
+    streamingDraft?.reasoning,
+    visibleMessages.length,
+  ]);
 
   useEffect(() => {
     if (!hydrated || onboardingShownRef.current) {
@@ -242,26 +319,51 @@ export function Chat() {
       cancelAnimationFrame(streamingFrameRef.current);
       streamingFrameRef.current = null;
     }
+    if (streamingTimeoutRef.current !== null) {
+      window.clearTimeout(streamingTimeoutRef.current);
+      streamingTimeoutRef.current = null;
+    }
 
     streamingDraftRef.current = null;
     setStreamingDraft(null);
   }, []);
 
-  const scheduleStreamingDraft = useCallback((threadId: string, messageId: string, content: string, reasoning: string) => {
-    streamingDraftRef.current = { threadId, messageId, content, reasoning };
-
+  const flushStreamingDraft = useCallback(() => {
     if (streamingFrameRef.current !== null) {
       return;
     }
 
     streamingFrameRef.current = requestAnimationFrame(() => {
       streamingFrameRef.current = null;
+      streamingLastFlushRef.current = window.performance.now();
+
       const draft = streamingDraftRef.current;
       if (draft) {
         setStreamingDraft(draft);
       }
     });
   }, []);
+
+  const scheduleStreamingDraft = useCallback((threadId: string, messageId: string, content: string, reasoning: string) => {
+    streamingDraftRef.current = { threadId, messageId, content, reasoning };
+
+    if (streamingFrameRef.current !== null || streamingTimeoutRef.current !== null) {
+      return;
+    }
+
+    const elapsedSinceFlush = window.performance.now() - streamingLastFlushRef.current;
+    const flushDelay = Math.max(0, STREAMING_DRAFT_FLUSH_MS - elapsedSinceFlush);
+
+    if (flushDelay > 0) {
+      streamingTimeoutRef.current = window.setTimeout(() => {
+        streamingTimeoutRef.current = null;
+        flushStreamingDraft();
+      }, flushDelay);
+      return;
+    }
+
+    flushStreamingDraft();
+  }, [flushStreamingDraft]);
 
   const updateAssistantMessage = useCallback(
     (threadId: string, messageId: string, content: string, reasoning?: string, usage?: ChatMessageUsage) => {
@@ -982,6 +1084,7 @@ export function Chat() {
           <>
             <section
               ref={scrollRef}
+              onScroll={handleMessageScroll}
               className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-7 md:px-8"
               aria-label="Chat messages"
             >
@@ -1144,6 +1247,13 @@ async function readErrorMessage(response: Response) {
   }
 
   return response.statusText || "Request failed. Try again.";
+}
+
+function isScrollNearBottom(scrollElement: HTMLDivElement) {
+  return (
+    scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight <=
+    AUTO_SCROLL_BOTTOM_THRESHOLD_PX
+  );
 }
 
 function processStreamEvents(

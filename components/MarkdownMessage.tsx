@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -300,10 +300,16 @@ function ChartBlock({ code, language }: { code: string; language: string }) {
   );
 }
 
+function isHtmlLanguage(language: string) {
+  return language === "html" || language === "htm";
+}
+
 function CodeBlock({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [highlightedHtml, setHighlightedHtml] = useState("");
   const [highlightError, setHighlightError] = useState("");
+  const canPreview = isHtmlLanguage(language);
 
   useEffect(() => {
     let cancelled = false;
@@ -344,25 +350,34 @@ function CodeBlock({ code, language }: { code: string; language: string }) {
 
   return (
     <div className="mb-3 overflow-hidden rounded-xl border border-(--border) bg-(--surface) font-sans last:mb-0">
-      <BlockHeader label={language || "code"} copied={copied} onCopy={copyCode} />
+      <BlockHeader
+        label={language || "code"}
+        copied={copied}
+        onCopy={copyCode}
+        previewing={canPreview ? previewing : undefined}
+        onPreview={canPreview ? () => setPreviewing((current) => !current) : undefined}
+      />
       {highlightError ? <RenderError message={highlightError} /> : null}
       {highlightedHtml ? (
         <div
-          className="rich-code scroll-area overflow-x-auto"
+          className="rich-code scroll-area"
           // Safe: Shiki escapes source text into HTML spans; language is whitelisted.
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       ) : (
-        <pre className="scroll-area overflow-x-auto p-3 text-[0.84rem] leading-5 text-(--foreground)">
+        <pre className="scroll-area p-3 text-[0.84rem] leading-5 whitespace-pre-wrap wrap-break-word text-(--foreground)">
           <code>{code}</code>
         </pre>
       )}
+      {canPreview && previewing ? <HtmlPreviewModal code={code} onClose={() => setPreviewing(false)} /> : null}
     </div>
   );
 }
 
 function PlainCodeBlock({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const canPreview = isHtmlLanguage(language);
 
   async function copyCode() {
     try {
@@ -376,10 +391,17 @@ function PlainCodeBlock({ code, language }: { code: string; language: string }) 
 
   return (
     <div className="mb-3 overflow-hidden rounded-xl border border-(--border) bg-(--surface) font-sans last:mb-0">
-      <BlockHeader label={language || "code"} copied={copied} onCopy={copyCode} />
-      <pre className="scroll-area overflow-x-auto p-3 text-[0.84rem] leading-5 text-(--foreground)">
+      <BlockHeader
+        label={language || "code"}
+        copied={copied}
+        onCopy={copyCode}
+        previewing={canPreview ? previewing : undefined}
+        onPreview={canPreview ? () => setPreviewing((current) => !current) : undefined}
+      />
+      <pre className="scroll-area p-3 text-[0.84rem] leading-5 whitespace-pre-wrap wrap-break-word text-(--foreground)">
         <code>{code}</code>
       </pre>
+      {canPreview && previewing ? <HtmlPreviewModal code={code} onClose={() => setPreviewing(false)} /> : null}
     </div>
   );
 }
@@ -426,10 +448,97 @@ function RenderedPanel({
       </div>
       <div className={error ? "hidden" : undefined}>{body}</div>
       {error ? (
-        <pre className="scroll-area max-h-64 overflow-auto border-t border-(--border) p-3 text-[0.8rem] leading-5 text-(--foreground)">
+        <pre className="scroll-area max-h-64 overflow-y-auto border-t border-(--border) p-3 text-[0.8rem] leading-5 whitespace-pre-wrap wrap-break-word text-(--foreground)">
           <code>{code}</code>
         </pre>
       ) : null}
+    </div>
+  );
+}
+
+function HtmlPreviewModal({ code, onClose }: { code: string; onClose: () => void }) {
+  const titleId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-90 flex items-center justify-center bg-black/45 p-3 md:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      onClick={onClose}
+    >
+      <div
+        className="flex h-[88dvh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-(--border) bg-(--surface-raised) shadow-[0_24px_80px_rgba(18,18,18,0.28)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex min-h-12 items-center justify-between gap-3 border-b border-(--border) px-4">
+          <h2 id={titleId} className="truncate text-sm font-medium text-(--foreground)">
+            HTML preview
+          </h2>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            title="Close preview"
+            aria-label="Close preview"
+            onClick={onClose}
+            className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-(--muted) transition hover:bg-(--surface-muted) hover:text-(--foreground) active:scale-95"
+          >
+            <X size={17} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 bg-white">
+          <HtmlPreview code={code} fill />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HtmlPreview({ code, fill = false }: { code: string; fill?: boolean }) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  function resizeIframe() {
+    if (fill) {
+      return;
+    }
+
+    const iframe = iframeRef.current;
+    const document = iframe?.contentDocument;
+    if (!iframe || !document?.body) {
+      return;
+    }
+
+    iframe.style.height = `${Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, 128)}px`;
+  }
+
+  useEffect(() => {
+    resizeIframe();
+  }, [code, fill]);
+
+  return (
+    <div className={fill ? "h-full bg-white" : "border-t border-(--border) bg-white"}>
+      <iframe
+        ref={iframeRef}
+        srcDoc={code}
+        sandbox=""
+        title="HTML preview"
+        onLoad={resizeIframe}
+        className={fill ? "block h-full w-full border-0" : "block min-h-32 w-full border-0"}
+      />
     </div>
   );
 }
@@ -438,23 +547,43 @@ function BlockHeader({
   label,
   copied,
   onCopy,
+  previewing,
+  onPreview,
 }: {
   label: string;
   copied: boolean;
   onCopy: () => void;
+  previewing?: boolean;
+  onPreview?: () => void;
 }) {
   return (
     <div className="flex min-h-10 items-center justify-between gap-3 border-b border-(--border) px-3">
       <span className="truncate text-xs text-(--muted)">{label}</span>
-      <button
-        type="button"
-        title="Copy source"
-        aria-label="Copy source"
-        onClick={onCopy}
-        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-(--muted) transition active:scale-95"
-      >
-        {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-      </button>
+      <div className="flex items-center gap-0.5">
+        {onPreview ? (
+          <button
+            type="button"
+            title={previewing ? "Hide preview" : "Show preview"}
+            aria-label={previewing ? "Hide preview" : "Show preview"}
+            aria-pressed={previewing}
+            onClick={onPreview}
+            className={`inline-flex min-h-9 min-w-9 items-center justify-center rounded-full transition active:scale-95 ${
+              previewing ? "text-(--accent)" : "text-(--muted)"
+            }`}
+          >
+            {previewing ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          title="Copy source"
+          aria-label="Copy source"
+          onClick={onCopy}
+          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-full text-(--muted) transition active:scale-95"
+        >
+          {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+        </button>
+      </div>
     </div>
   );
 }
