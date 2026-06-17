@@ -15,6 +15,7 @@ import {
   Minimize2,
   RefreshCw,
   RotateCcw,
+  Route,
   Search,
   Trash2,
   Upload,
@@ -23,6 +24,7 @@ import {
   DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MODEL,
   DEFAULT_MULTIMODAL_SETTINGS,
+  DEFAULT_PROVIDER_ROUTING,
   DEFAULT_REASONING,
   DEFAULT_RESPONSE_CACHING,
   DEFAULT_SERVER_TOOLS,
@@ -31,10 +33,18 @@ import {
   type FetchEngine,
   type ImageGenerationMode,
   type OpenRouterModel,
+  type ProviderSort,
   type ReasoningEffort,
   type SearchContextSize,
   type SearchEngine,
 } from "@/lib/types";
+import {
+  MODEL_VARIANT_OPTIONS,
+  parseModelWithVariants,
+  setModelBase,
+  toggleModelVariant,
+} from "@/lib/model-variants";
+import { OPENROUTER_ROUTER_PICKS } from "@/lib/openrouter";
 
 type SettingsChange = (settings: ChatSettings) => void;
 
@@ -149,10 +159,12 @@ export function ModelSettingsSection({
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState("");
   const multimodal = settings.multimodal ?? DEFAULT_MULTIMODAL_SETTINGS;
+  const parsedModel = useMemo(() => parseModelWithVariants(settings.model || DEFAULT_MODEL), [settings.model]);
+  const baseModel = parsedModel.baseModel || DEFAULT_MODEL;
 
   useEffect(() => {
-    setModelQuery(settings.model || DEFAULT_MODEL);
-  }, [settings.model]);
+    setModelQuery(baseModel);
+  }, [baseModel]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -204,6 +216,39 @@ export function ModelSettingsSection({
     <div className="space-y-4">
       <SectionCard title="Model picker" description="Search current OpenRouter models or type a custom model id." icon={<Search size={18} aria-hidden="true" />}>
         <div className="mb-3">
+          <span className="mb-2 block text-sm font-medium">OpenRouter routers</span>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {OPENROUTER_ROUTER_PICKS.map((router) => {
+              const active = baseModel === router.id;
+
+              return (
+                <button
+                  key={router.id}
+                  type="button"
+                  title={router.description}
+                  onClick={() => {
+                    onSettingsChange({
+                      ...settings,
+                      model: router.id,
+                    });
+                    setModelQuery(router.id);
+                  }}
+                  className={`rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.99] ${
+                    active
+                      ? "border-(--accent-strong) bg-(--accent-strong) text-(--background)"
+                      : "border-(--border) bg-(--background) text-(--foreground) hover:bg-(--surface-muted)"
+                  }`}
+                >
+                  <span className="block text-sm font-medium">{router.label}</span>
+                  <span className="mt-1 block text-xs leading-5 opacity-80">{router.description}</span>
+                  <span className="mt-1 block truncate font-mono text-[0.7rem] opacity-70">{router.id}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mb-3">
           <label className="mb-2 block text-sm font-medium">Model search</label>
           <div className="flex min-h-12 items-center gap-2 rounded-xl border border-(--border) bg-(--background) px-3">
             <Search size={17} className="shrink-0 text-(--muted)" aria-hidden="true" />
@@ -236,6 +281,42 @@ export function ModelSettingsSection({
           />
         </label>
 
+        <div className="mb-3">
+          <span className="mb-2 block text-sm font-medium">Model variants</span>
+          <div className="flex flex-wrap gap-2">
+            {MODEL_VARIANT_OPTIONS.map((option) => {
+              const active = parsedModel.variants.has(option.id);
+
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={active}
+                  title={option.description}
+                  onClick={() =>
+                    onSettingsChange({
+                      ...settings,
+                      model: toggleModelVariant(settings.model || DEFAULT_MODEL, option.id, !active),
+                    })
+                  }
+                  className={`min-h-9 rounded-full border px-3 text-sm font-medium transition active:scale-[0.98] ${
+                    active
+                      ? "border-(--accent-strong) bg-(--accent-strong) text-(--background)"
+                      : "border-(--border) bg-(--background) text-(--foreground) hover:bg-(--surface-muted)"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs leading-5 text-(--muted)">
+            Append OpenRouter suffixes such as <code className="text-(--foreground)">:nitro</code> or{" "}
+            <code className="text-(--foreground)">:online</code>. Online is a lighter alternative to the full web search
+            server tool. Nitro, Floor, and Exacto are mutually exclusive routing sorts.
+          </p>
+        </div>
+
         <div className="scroll-area max-h-72 space-y-2 overflow-y-auto rounded-xl border border-(--border) bg-(--background) p-2">
           {modelsLoading ? (
             <p className="px-2 py-5 text-center text-sm text-(--muted)">Loading models...</p>
@@ -251,11 +332,11 @@ export function ModelSettingsSection({
                 onClick={() => {
                   onSettingsChange({
                     ...settings,
-                    model: model.id,
+                    model: setModelBase(settings.model || DEFAULT_MODEL, model.id),
                   });
                   setModelQuery(model.id);
                 }}
-                className={`block min-h-16 w-full rounded-lg px-3 py-2 text-left transition active:scale-[0.99] ${settings.model === model.id
+                className={`block min-h-16 w-full rounded-lg px-3 py-2 text-left transition active:scale-[0.99] ${baseModel === model.id
                     ? "bg-(--accent-strong) text-(--background)"
                     : "bg-(--surface-raised) text-(--foreground)"
                   }`}
@@ -364,6 +445,50 @@ export function ModelSettingsSection({
             </p>
           </div>
         ) : null}
+      </SectionCard>
+
+      <SectionCard
+        title="Provider routing"
+        description="Control how OpenRouter selects among providers for your model."
+        icon={<Route size={18} aria-hidden="true" />}
+      >
+        <SelectField
+          label="Provider sort"
+          value={settings.providerRouting?.providerSort ?? DEFAULT_PROVIDER_ROUTING.providerSort}
+          onChange={(value) =>
+            onSettingsChange({
+              ...settings,
+              providerRouting: {
+                ...(settings.providerRouting ?? DEFAULT_PROVIDER_ROUTING),
+                providerSort: value as ProviderSort,
+              },
+            })
+          }
+          options={["default", "price", "throughput", "latency"]}
+        />
+
+        <div className="mt-3">
+          <ToolToggle
+            title="Deny data collection"
+            description="Only route to providers that do not store prompts or completions."
+            enabled={settings.providerRouting?.dataCollectionDeny ?? false}
+            onChange={(dataCollectionDeny) =>
+              onSettingsChange({
+                ...settings,
+                providerRouting: {
+                  ...(settings.providerRouting ?? DEFAULT_PROVIDER_ROUTING),
+                  dataCollectionDeny,
+                },
+              })
+            }
+          />
+        </div>
+
+        <p className="mt-3 text-xs leading-5 text-(--muted)">
+          Default uses OpenRouter&apos;s price-weighted load balancing. Explicit sort disables load balancing and tries
+          providers in order. Set provider sort to price (or use the Floor model variant) to opt out of Auto Exacto on
+          tool-calling requests and prioritize cost instead. Data collection filtering may reduce available providers.
+        </p>
       </SectionCard>
     </div>
   );

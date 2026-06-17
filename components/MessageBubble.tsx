@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
-import type { ChatAttachment, ChatGeneratedFile, ChatMessage, ChatMessageSource } from "@/lib/types";
+import type { ChatAttachment, ChatGeneratedFile, ChatMessage, ChatMessageSource, ChatMessageUsage } from "@/lib/types";
 import { formatBytes } from "@/lib/utils";
 
 type MessageBubbleProps = {
@@ -246,6 +246,7 @@ export function MessageBubble({
       ) : null}
       <GeneratedFileGrid files={files} />
       <SourceChips sources={message.sources ?? []} />
+      <UsageSummary usage={message.usage} />
       <MessageActions
         align="left"
         copied={copied}
@@ -455,6 +456,46 @@ function GeneratedFileGrid({ files }: { files: ChatGeneratedFile[] }) {
       )}
     </div>
   );
+}
+
+function UsageSummary({ usage }: { usage?: ChatMessageUsage }) {
+  if (!usage) {
+    return null;
+  }
+
+  const cachedTokens = usage.cachedTokens ?? 0;
+  const inputTokens = usage.inputTokens;
+  const hasCachedTokens = cachedTokens > 0;
+  const hasInputTokens = typeof inputTokens === "number" && inputTokens > 0;
+
+  if (!hasCachedTokens && !hasInputTokens && usage.outputTokens === undefined) {
+    return null;
+  }
+
+  const parts: string[] = [];
+  if (typeof inputTokens === "number") {
+    parts.push(`${formatTokenCount(inputTokens)} prompt`);
+  }
+  if (typeof usage.outputTokens === "number") {
+    parts.push(`${formatTokenCount(usage.outputTokens)} completion`);
+  }
+  if (hasCachedTokens) {
+    const savings =
+      hasInputTokens && inputTokens > 0
+        ? ` (${Math.round((cachedTokens / inputTokens) * 100)}% cached)`
+        : "";
+    parts.push(`${formatTokenCount(cachedTokens)} cached${savings}`);
+  }
+
+  return (
+    <p className="mt-2 text-xs text-(--muted)" aria-label="Token usage">
+      {parts.join(" · ")}
+    </p>
+  );
+}
+
+function formatTokenCount(value: number) {
+  return Intl.NumberFormat("en", { notation: "compact" }).format(value);
 }
 
 function SourceChips({ sources }: { sources: ChatMessageSource[] }) {

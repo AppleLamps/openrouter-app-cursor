@@ -1,6 +1,7 @@
 import {
   DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MULTIMODAL_SETTINGS,
+  DEFAULT_PROVIDER_ROUTING,
   DEFAULT_REASONING,
   DEFAULT_RESPONSE_CACHING,
   DEFAULT_SERVER_TOOLS,
@@ -8,9 +9,12 @@ import {
   type ChatGeneratedFile,
   type ChatMessage,
   type ChatMessageSource,
+  type ChatMessageUsage,
   type FetchEngine,
   type MessageTransformSettings,
   type MultimodalSettings,
+  type ProviderRoutingSettings,
+  type ProviderSort,
   type ReasoningEffort,
   type ReasoningSettings,
   type ResponseCachingSettings,
@@ -38,7 +42,24 @@ export function isChatMessage(value: unknown): value is ChatMessage {
     (sources === undefined || Array.isArray(sources)) &&
     (attachments === undefined || Array.isArray(attachments)) &&
     (files === undefined || Array.isArray(files)) &&
-    (message.reasoning === undefined || typeof message.reasoning === "string")
+    (message.reasoning === undefined || typeof message.reasoning === "string") &&
+    (message.usage === undefined || isChatMessageUsage(message.usage))
+  );
+}
+
+export function isChatMessageUsage(value: unknown): value is ChatMessageUsage {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const usage = value as Partial<ChatMessageUsage>;
+  const numeric = (field: unknown) => field === undefined || (typeof field === "number" && Number.isFinite(field));
+
+  return (
+    numeric(usage.inputTokens) &&
+    numeric(usage.outputTokens) &&
+    numeric(usage.cachedTokens) &&
+    numeric(usage.cacheWriteTokens)
   );
 }
 
@@ -250,6 +271,23 @@ export function normalizeResponseCaching(value: unknown): ResponseCachingSetting
       86400,
       DEFAULT_RESPONSE_CACHING.ttlSeconds,
     ),
+  };
+}
+
+export function normalizeProviderSort(value: unknown): ProviderSort {
+  return value === "price" || value === "throughput" || value === "latency" ? value : "default";
+}
+
+export function normalizeProviderRouting(value: unknown): ProviderRoutingSettings {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_PROVIDER_ROUTING;
+  }
+
+  const routing = value as Partial<ProviderRoutingSettings>;
+
+  return {
+    providerSort: normalizeProviderSort(routing.providerSort),
+    dataCollectionDeny: Boolean(routing.dataCollectionDeny),
   };
 }
 

@@ -7,6 +7,14 @@ export type ChatMessage = {
   attachments?: ChatAttachment[];
   files?: ChatGeneratedFile[];
   reasoning?: string;
+  usage?: ChatMessageUsage;
+};
+
+export type ChatMessageUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedTokens?: number;
+  cacheWriteTokens?: number;
 };
 
 export type ChatMessageSource = {
@@ -52,6 +60,7 @@ export type ChatSettings = {
   messageTransforms: MessageTransformSettings;
   responseCaching: ResponseCachingSettings;
   reasoning: ReasoningSettings;
+  providerRouting: ProviderRoutingSettings;
 };
 
 export type SearchEngine = "auto" | "native" | "exa" | "firecrawl" | "parallel" | "perplexity";
@@ -110,6 +119,13 @@ export type ReasoningSettings = {
   enabled: boolean;
   effort: ReasoningEffort;
   exclude: boolean;
+};
+
+export type ProviderSort = "default" | "price" | "throughput" | "latency";
+
+export type ProviderRoutingSettings = {
+  providerSort: ProviderSort;
+  dataCollectionDeny: boolean;
 };
 
 export type OpenRouterModel = {
@@ -189,6 +205,11 @@ export const DEFAULT_REASONING: ReasoningSettings = {
   exclude: false,
 };
 
+export const DEFAULT_PROVIDER_ROUTING: ProviderRoutingSettings = {
+  providerSort: "default",
+  dataCollectionDeny: false,
+};
+
 export const DEFAULT_SETTINGS: ChatSettings = {
   model: DEFAULT_MODEL,
   systemPrompt: "You are a concise, helpful assistant.",
@@ -198,6 +219,7 @@ export const DEFAULT_SETTINGS: ChatSettings = {
   messageTransforms: DEFAULT_MESSAGE_TRANSFORMS,
   responseCaching: DEFAULT_RESPONSE_CACHING,
   reasoning: DEFAULT_REASONING,
+  providerRouting: DEFAULT_PROVIDER_ROUTING,
 };
 
 export type ApiStatus = "checking" | "configured" | "missing" | "invalid" | "unknown";

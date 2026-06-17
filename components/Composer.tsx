@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  Braces,
   FileText,
   Image as ImageIcon,
   Mic,
@@ -19,7 +20,7 @@ type ComposerProps = {
   isStreaming: boolean;
   disabled?: boolean;
   model: string;
-  onSend: (message: string, attachments?: ChatAttachment[]) => boolean;
+  onSend: (message: string, attachments?: ChatAttachment[], options?: { jsonMode?: boolean }) => boolean;
   onStop: () => void;
   onOpenSettings: () => void;
   onVoice: () => void;
@@ -46,6 +47,7 @@ export function Composer({
 }: ComposerProps) {
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [jsonMode, setJsonMode] = useState(false);
   const [attachmentError, setAttachmentError] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -65,9 +67,10 @@ export function Composer({
       return;
     }
 
-    if (onSend(next, attachments) !== false) {
+    if (onSend(next, attachments, { jsonMode }) !== false) {
       setValue("");
       setAttachments([]);
+      setJsonMode(false);
       setAttachmentError("");
     }
   }
@@ -172,16 +175,31 @@ export function Composer({
         </label>
 
         <div className="flex items-center justify-between gap-3 pt-2">
-          <button
-            type="button"
-            title="Attach image or PDF"
-            aria-label="Attach image or PDF"
-            disabled={disabled || isStreaming || attachments.length >= MAX_ATTACHMENTS}
-            onClick={() => fileInputRef.current?.click()}
-            className="grid h-9 w-9 place-items-center rounded-md text-(--foreground) transition hover:bg-(--surface-muted) disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            <Paperclip size={18} aria-hidden="true" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              title="Attach image or PDF"
+              aria-label="Attach image or PDF"
+              disabled={disabled || isStreaming || attachments.length >= MAX_ATTACHMENTS}
+              onClick={() => fileInputRef.current?.click()}
+              className="grid h-9 w-9 place-items-center rounded-md text-(--foreground) transition hover:bg-(--surface-muted) disabled:cursor-not-allowed disabled:opacity-45"
+            >
+              <Paperclip size={18} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              title={jsonMode ? "JSON mode on" : "JSON mode off"}
+              aria-label={jsonMode ? "Disable JSON mode" : "Enable JSON mode"}
+              aria-pressed={jsonMode}
+              disabled={disabled || isStreaming}
+              onClick={() => setJsonMode((current) => !current)}
+              className={`grid h-9 w-9 place-items-center rounded-md transition hover:bg-(--surface-muted) disabled:cursor-not-allowed disabled:opacity-45 ${
+                jsonMode ? "bg-(--surface-muted) text-(--foreground)" : "text-(--muted)"
+              }`}
+            >
+              <Braces size={18} aria-hidden="true" />
+            </button>
+          </div>
 
           <div className="flex min-w-0 items-center gap-1.5">
             <button

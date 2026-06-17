@@ -8,6 +8,7 @@ import {
   type ChatGeneratedFile,
   type ResponseCachingSettings,
 } from "@/lib/types";
+import { buildChatExtraBody } from "@/lib/openrouter";
 import { createId } from "@/lib/utils";
 import {
   clampNumber,
@@ -18,6 +19,7 @@ import {
   normalizeFetchEngine,
   normalizeMessageTransforms,
   normalizeMultimodalSettings,
+  normalizeProviderRouting,
   normalizeReasoning,
   normalizeResponseCaching,
   normalizeSearchEngine,
@@ -37,6 +39,9 @@ type ChatRequestBody = {
   messageTransforms?: unknown;
   responseCaching?: unknown;
   reasoning?: unknown;
+  providerRouting?: unknown;
+  sessionId?: unknown;
+  jsonMode?: unknown;
 };
 
 type OpenRouterServerTool = {
@@ -60,11 +65,24 @@ type ReasoningValidation = {
   providerOptions: Record<string, JSONValue>;
 };
 
+type ProviderRoutingValidation = {
+  providerOptions: Record<string, JSONValue>;
+};
+
 type StreamEvent =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
   | { type: "source"; source: ChatMessageSource }
   | { type: "file"; file: ChatGeneratedFile }
+  | {
+      type: "usage";
+      usage: {
+        inputTokens?: number;
+        outputTokens?: number;
+        cachedTokens?: number;
+        cacheWriteTokens?: number;
+      };
+    }
   | { type: "error"; error: { code: PublicErrorCode; message: string } }
   | { type: "done" };
 
@@ -98,6 +116,7 @@ export async function POST(req: Request) {
     headers: {
       "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
       "X-OpenRouter-Title": "OpenRouter Chat PWA",
+      "x-session-id": validated.sessionId,
       ...createResponseCachingHeaders(validated.responseCaching),
     },
   });
@@ -107,11 +126,22 @@ export async function POST(req: Request) {
       validated.multimodal.providerOptions,
       validated.messageTransforms.providerOptions,
       validated.reasoning.providerOptions,
+      validated.providerRouting.providerOptions,
       validated.serverTools.tools.length > 0 ? { tools: validated.serverTools.tools } : undefined,
     );
 
     const result = streamText({
-      model: openrouter.chat(validated.model),
+      model: openrouter.chat(
+        validated.model,
+        {
+          extraBody: buildChatExtraBody({
+            sessionId: validated.sessionId,
+            model: validated.model,
+            systemPrompt: validated.systemPrompt,
+            jsonMode: validated.jsonMode,
+          }),
+        },
+      ),
       messages: validated.messages,
       system: validated.systemPrompt || undefined,
       temperature: validated.temperature,
@@ -138,6 +168,9 @@ function validateRequestBody(body: ChatRequestBody):
     messageTransforms: MessageTransformValidation;
     responseCaching: ResponseCachingSettings;
     reasoning: ReasoningValidation;
+    providerRouting: ProviderRoutingValidation;
+    sessionId: string;
+    jsonMode: boolean;
   }
   | {
     ok: false;
@@ -207,6 +240,18 @@ function validateRequestBody(body: ChatRequestBody):
     };
   }
 
+  const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+  if (!sessionId) {
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_input",
+      message: "A session id is required for chat requests.",
+    };
+  }
+
+  const jsonMode = Boolean(body.jsonMode);
+
   return {
     ok: true,
     apiKey,
@@ -216,9 +261,12 @@ function validateRequestBody(body: ChatRequestBody):
     temperature,
     serverTools: validateServerTools(body.serverTools),
     multimodal: validateMultimodal(body.multimodal, chatMessages),
-    messageTransforms: validateMessageTransforms(body.messageTransforms),
+    messageTransforms: validateMessageTransforms(body.messageTransforms, jsonMode),
     responseCaching: normalizeResponseCaching(body.responseCaching),
     reasoning: validateReasoning(body.reasoning),
+    providerRouting: validateProviderRouting(body.providerRouting),
+    sessionId,
+    jsonMode,
   };
 }
 
@@ -436,7 +484,44 @@ function enqueueStreamPart(
         dataUrl: `data:${part.file.mediaType};base64,${part.file.base64}`,
       },
     });
+    return;
   }
+
+  if (part.type === "finish") {
+    const usageEvent = usageEventFromFinish(part);
+    if (usageEvent) {
+      enqueueEvent(controller, encoder, usageEvent);
+    }
+  }
+}
+
+function usageEventFromFinish(part: Extract<ChatTextStreamPart, { type: "finish" }>): StreamEvent | null {
+  const usage = part.totalUsage;
+  if (!usage) {
+    return null;
+  }
+
+  const cachedTokens = usage.inputTokenDetails?.cacheReadTokens ?? usage.cachedInputTokens;
+  const cacheWriteTokens = usage.inputTokenDetails?.cacheWriteTokens;
+  const hasUsage =
+    usage.inputTokens !== undefined ||
+    usage.outputTokens !== undefined ||
+    cachedTokens !== undefined ||
+    cacheWriteTokens !== undefined;
+
+  if (!hasUsage) {
+    return null;
+  }
+
+  return {
+    type: "usage",
+    usage: {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cachedTokens,
+      cacheWriteTokens,
+    },
+  };
 }
 
 function enqueueEvent(
@@ -552,15 +637,21 @@ function validateMultimodal(value: unknown, messages: ChatMessage[]): Multimodal
   return { providerOptions };
 }
 
-function validateMessageTransforms(value: unknown): MessageTransformValidation {
+function validateMessageTransforms(value: unknown, jsonMode = false): MessageTransformValidation {
   const settings = normalizeMessageTransforms(value);
-  const plugin = settings.contextCompression.enabled
-    ? { id: "context-compression" }
-    : { id: "context-compression", enabled: false };
+  const plugins: JSONValue[] = [
+    settings.contextCompression.enabled
+      ? { id: "context-compression" }
+      : { id: "context-compression", enabled: false },
+  ];
+
+  if (jsonMode) {
+    plugins.push({ id: "response-healing" });
+  }
 
   return {
     providerOptions: {
-      plugins: [plugin],
+      plugins,
     },
   };
 }
@@ -579,6 +670,25 @@ function validateReasoning(value: unknown): ReasoningValidation {
   }
 
   return { providerOptions: { reasoning } };
+}
+
+function validateProviderRouting(value: unknown): ProviderRoutingValidation {
+  const settings = normalizeProviderRouting(value);
+  const provider: Record<string, JSONValue> = {};
+
+  if (settings.providerSort !== "default") {
+    provider.sort = settings.providerSort;
+  }
+
+  if (settings.dataCollectionDeny) {
+    provider.data_collection = "deny";
+  }
+
+  if (Object.keys(provider).length === 0) {
+    return { providerOptions: {} };
+  }
+
+  return { providerOptions: { provider } };
 }
 
 function getRecord(value: unknown): Record<string, unknown> | null {

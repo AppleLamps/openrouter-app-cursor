@@ -1,6 +1,7 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText, type ModelMessage } from "ai";
 import { DEFAULT_MODEL, type ChatMessage } from "@/lib/types";
+import { parseTitleResponse, RESPONSE_HEALING_PLUGIN, TITLE_RESPONSE_FORMAT } from "@/lib/openrouter";
 import { isChatAttachment, isChatMessage } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -39,14 +40,19 @@ export async function POST(req: Request) {
 
   try {
     const result = await generateText({
-      model: openrouter.chat(DEFAULT_MODEL),
+      model: openrouter.chat(DEFAULT_MODEL, {
+        extraBody: {
+          response_format: TITLE_RESPONSE_FORMAT,
+          plugins: [RESPONSE_HEALING_PLUGIN],
+        },
+      }),
       system: TITLE_SYSTEM_PROMPT,
       messages: validated.messages,
       temperature: 0.4,
       abortSignal: req.signal,
     });
 
-    const title = normalizeGeneratedTitle(result.text);
+    const title = parseTitleResponse(result.text);
     if (!title) {
       return jsonError("Could not generate a title.", 502, "openrouter_failure");
     }
@@ -155,16 +161,6 @@ function toModelMessage(message: ChatMessage): ModelMessage | null {
   }
 
   return parts.length > 0 ? { role: "user", content: parts } : null;
-}
-
-function normalizeGeneratedTitle(raw: string) {
-  const trimmed = raw.replace(/\s+/g, " ").trim();
-  const unquoted = trimmed.replace(/^["'`]+|["'`]+$/g, "").trim();
-  if (!unquoted) {
-    return "";
-  }
-
-  return unquoted.length > 60 ? `${unquoted.slice(0, 57).trim()}...` : unquoted;
 }
 
 function isAbortError(error: unknown) {

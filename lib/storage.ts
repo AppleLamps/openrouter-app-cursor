@@ -12,6 +12,7 @@ import {
   isChatThread,
   normalizeMessageTransforms,
   normalizeMultimodalSettings,
+  normalizeProviderRouting,
   normalizeReasoning,
   normalizeResponseCaching,
   normalizeServerTools,
@@ -58,6 +59,7 @@ function normalizeSettings(value: unknown): ChatSettings {
     messageTransforms: normalizeMessageTransforms(settings.messageTransforms),
     responseCaching: normalizeResponseCaching(settings.responseCaching),
     reasoning: normalizeReasoning(settings.reasoning),
+    providerRouting: normalizeProviderRouting(settings.providerRouting),
   };
 }
 

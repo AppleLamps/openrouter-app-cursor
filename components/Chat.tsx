@@ -13,6 +13,7 @@ import {
   type ChatGeneratedFile,
   type ChatMessage,
   type ChatMessageSource,
+  type ChatMessageUsage,
   type ChatSettings,
   type ChatThread,
 } from "@/lib/types";
@@ -32,6 +33,7 @@ import { exportThreadMarkdown, exportThreadsJson, parseThreadsJson } from "@/lib
 import {
   isChatGeneratedFile as isGeneratedFile,
   isChatMessageSource as isMessageSource,
+  isChatMessageUsage as isMessageUsage,
   isChatThreadArray,
 } from "@/lib/validation";
 
@@ -57,6 +59,7 @@ type ChatStreamEvent =
   | { type: "reasoning"; text?: string }
   | { type: "source"; source?: ChatMessageSource }
   | { type: "file"; file?: ChatGeneratedFile }
+  | { type: "usage"; usage?: ChatMessageUsage }
   | { type: "error"; error?: { message?: string } }
   | { type: "done" };
 
@@ -245,12 +248,17 @@ export function Chat() {
   }, []);
 
   const updateAssistantMessage = useCallback(
-    (threadId: string, messageId: string, content: string, reasoning?: string) => {
+    (threadId: string, messageId: string, content: string, reasoning?: string, usage?: ChatMessageUsage) => {
       updateThread(threadId, (thread) => ({
         ...thread,
         messages: thread.messages.map((message) =>
           message.id === messageId
-            ? { ...message, content, reasoning: reasoning ?? message.reasoning }
+            ? {
+                ...message,
+                content,
+                reasoning: reasoning ?? message.reasoning,
+                usage: usage ?? message.usage,
+              }
             : message,
         ),
         updatedAt: new Date().toISOString(),
@@ -260,11 +268,24 @@ export function Chat() {
   );
 
   const commitAssistantMessage = useCallback(
-    (threadId: string, messageId: string, content: string, reasoning?: string) => {
+    (threadId: string, messageId: string, content: string, reasoning?: string, usage?: ChatMessageUsage) => {
       clearStreamingDraft();
-      updateAssistantMessage(threadId, messageId, content, reasoning);
+      updateAssistantMessage(threadId, messageId, content, reasoning, usage);
     },
     [clearStreamingDraft, updateAssistantMessage],
+  );
+
+  const setAssistantUsage = useCallback(
+    (threadId: string, messageId: string, usage: ChatMessageUsage) => {
+      updateThread(threadId, (thread) => ({
+        ...thread,
+        messages: thread.messages.map((message) =>
+          message.id === messageId ? { ...message, usage } : message,
+        ),
+        updatedAt: new Date().toISOString(),
+      }));
+    },
+    [updateThread],
   );
 
   const addAssistantSource = useCallback(
@@ -322,10 +343,12 @@ export function Chat() {
       threadId,
       title,
       requestMessages,
+      jsonMode = false,
     }: {
       threadId: string;
       title: string;
       requestMessages: ChatMessage[];
+      jsonMode?: boolean;
     }) => {
       if (isStreamingRef.current) {
         return false;
@@ -359,6 +382,7 @@ export function Chat() {
       abortRef.current = controller;
       let streamedContent = "";
       let streamedReasoning = "";
+      let streamedUsage: ChatMessageUsage | undefined;
       let completedSuccessfully = false;
 
       void (async () => {
@@ -379,6 +403,9 @@ export function Chat() {
               messageTransforms: settings.messageTransforms,
               responseCaching: settings.responseCaching,
               reasoning: settings.reasoning,
+              providerRouting: settings.providerRouting,
+              sessionId: threadId,
+              jsonMode,
             }),
             signal: controller.signal,
           });
@@ -401,54 +428,45 @@ export function Chat() {
           const decoder = new TextDecoder();
           let buffer = "";
 
+          const streamHandlers = {
+            onText: (text: string) => {
+              streamedContent += text;
+              scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent, streamedReasoning);
+            },
+            onReasoning: (text: string) => {
+              streamedReasoning += text;
+              scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent, streamedReasoning);
+            },
+            onSource: (source: ChatMessageSource) => addAssistantSource(threadId, assistantMessage.id, source),
+            onFile: (file: ChatGeneratedFile) => addAssistantFile(threadId, assistantMessage.id, file),
+            onUsage: (usage: ChatMessageUsage) => {
+              streamedUsage = usage;
+              setAssistantUsage(threadId, assistantMessage.id, usage);
+            },
+            onError: (message: string) => {
+              streamedContent = message;
+              commitAssistantMessage(threadId, assistantMessage.id, message);
+              setStatusText(message);
+            },
+          };
+
           for (; ;) {
             const { done, value } = await reader.read();
             if (done) {
               break;
             }
             buffer += decoder.decode(value, { stream: true });
-            buffer = processStreamEvents(buffer, {
-              onText: (text) => {
-                streamedContent += text;
-                scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent, streamedReasoning);
-              },
-              onReasoning: (text) => {
-                streamedReasoning += text;
-                scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent, streamedReasoning);
-              },
-              onSource: (source) => addAssistantSource(threadId, assistantMessage.id, source),
-              onFile: (file) => addAssistantFile(threadId, assistantMessage.id, file),
-              onError: (message) => {
-                streamedContent = message;
-                commitAssistantMessage(threadId, assistantMessage.id, message);
-                setStatusText(message);
-              },
-            });
+            buffer = processStreamEvents(buffer, streamHandlers);
           }
 
           buffer += decoder.decode();
-          processStreamEvents(`${buffer}\n`, {
-            onText: (text) => {
-              streamedContent += text;
-              scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent, streamedReasoning);
-            },
-            onReasoning: (text) => {
-              streamedReasoning += text;
-              scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent, streamedReasoning);
-            },
-            onSource: (source) => addAssistantSource(threadId, assistantMessage.id, source),
-            onFile: (file) => addAssistantFile(threadId, assistantMessage.id, file),
-            onError: (message) => {
-              streamedContent = message;
-              commitAssistantMessage(threadId, assistantMessage.id, message);
-              setStatusText(message);
-            },
-          });
+          processStreamEvents(`${buffer}\n`, streamHandlers);
           commitAssistantMessage(
             threadId,
             assistantMessage.id,
             streamedContent.trim() ? streamedContent : "No response.",
             streamedReasoning.trim() ? streamedReasoning : undefined,
+            streamedUsage,
           );
           completedSuccessfully = true;
         } catch (error) {
@@ -485,6 +503,7 @@ export function Chat() {
       addAssistantSource,
       commitAssistantMessage,
       scheduleStreamingDraft,
+      setAssistantUsage,
       setStreamingActive,
       settings,
       updateThread,
@@ -492,7 +511,7 @@ export function Chat() {
   );
 
   const sendMessage = useCallback(
-    (rawContent: string, attachments: ChatAttachment[] = []) => {
+    (rawContent: string, attachments: ChatAttachment[] = [], options?: { jsonMode?: boolean }) => {
       const content = rawContent.trim();
       if (!content && attachments.length === 0) {
         setStatusText("Enter a message or attach a file before sending.");
@@ -520,6 +539,7 @@ export function Chat() {
         threadId: activeThread.id,
         title: nextTitle,
         requestMessages,
+        jsonMode: options?.jsonMode,
       });
     },
     [activeThread, startAssistantRequest],
@@ -1063,6 +1083,7 @@ function processStreamEvents(
     onReasoning: (text: string) => void;
     onSource: (source: ChatMessageSource) => void;
     onFile: (file: ChatGeneratedFile) => void;
+    onUsage: (usage: ChatMessageUsage) => void;
     onError: (message: string) => void;
   },
 ) {
@@ -1087,6 +1108,9 @@ function processStreamEvents(
       }
       if (event.type === "file" && isGeneratedFile(event.file)) {
         handlers.onFile(event.file);
+      }
+      if (event.type === "usage" && isMessageUsage(event.usage)) {
+        handlers.onUsage(event.usage);
       }
       if (event.type === "error" && typeof event.error?.message === "string") {
         handlers.onError(event.error.message);
