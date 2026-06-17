@@ -105,15 +105,21 @@ export function ChatSidebar({
           collapsed ? "lg:w-19" : "lg:w-70",
         ].join(" ")}
       >
-        <div className="flex items-center justify-between gap-2 px-3 pb-3 lg:pt-3">
+        <div className={`flex gap-2 px-3 pb-3 lg:pt-3 ${collapsed ? "flex-col items-center lg:px-2" : "items-center justify-between"}`}>
           <button
             type="button"
             onClick={() => onComingSoon("Home")}
-            className="inline-flex min-w-0 items-center rounded-md px-1 py-1 text-left"
+            title="OpenRouter"
+            aria-label="OpenRouter home"
+            className={`inline-flex min-w-0 items-center rounded-md text-left ${collapsed ? "justify-center" : "px-1 py-1"}`}
           >
-            {!collapsed ? <span className="truncate font-serif text-[1.6rem] leading-none text-(--foreground)">OpenRouter</span> : null}
+            {collapsed ? (
+              <span className="grid h-9 w-9 place-items-center font-serif text-2xl leading-none text-(--brand)" aria-hidden="true">*</span>
+            ) : (
+              <span className="truncate font-serif text-[1.6rem] leading-none text-(--foreground)">OpenRouter</span>
+            )}
           </button>
-          <div className="ml-auto flex items-center gap-1">
+          <div className={`flex items-center gap-1 ${collapsed ? "" : "ml-auto"}`}>
             <button
               type="button"
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -164,9 +170,9 @@ export function ChatSidebar({
             </nav>
           </div>
         ) : (
-          <div className="space-y-2 px-2">
-            <CollapsedButton label="Search chats" icon={Search} onClick={() => onToggleCollapsed()} />
-            <CollapsedButton label="New chat" icon={Plus} onClick={onNewThread} />
+          <div className="flex flex-col items-center gap-1 px-2">
+            <CollapsedButton label="New chat" icon={Plus} onClick={onNewThread} primary />
+            <CollapsedButton label="Search chats" icon={Search} onClick={onToggleCollapsed} />
           </div>
         )}
 
@@ -198,22 +204,24 @@ export function ChatSidebar({
             </div>
           </div>
         ) : (
-          <div className="scroll-area mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto px-2">
-            {sortedThreads.slice(0, 12).map((thread) => (
-              <button
-                key={thread.id}
-                type="button"
-                title={thread.title}
-                aria-label={thread.title}
-                onClick={() => onSelectThread(thread.id)}
-                className={`grid h-10 w-full place-items-center rounded-xl transition ${thread.id === activeThreadId
-                  ? "bg-(--surface-muted) text-(--foreground)"
-                  : "text-(--muted) hover:bg-(--surface)"
-                  }`}
-              >
-                <MessageCircle size={17} aria-hidden="true" />
-              </button>
-            ))}
+          <div className="mt-3 flex min-h-0 flex-1 flex-col items-center border-t border-(--border) px-2 pt-3">
+            <div className="scroll-area flex w-full flex-col items-center gap-1 overflow-y-auto">
+              {sortedThreads.slice(0, 14).map((thread) => (
+                <button
+                  key={thread.id}
+                  type="button"
+                  title={thread.title}
+                  aria-label={thread.title}
+                  onClick={() => onSelectThread(thread.id)}
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg transition ${thread.id === activeThreadId
+                    ? "bg-(--surface-muted) text-(--foreground)"
+                    : "text-(--muted) hover:bg-(--surface-muted) hover:text-(--foreground)"
+                    }`}
+                >
+                  <MessageCircle size={16} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
@@ -234,7 +242,19 @@ export function ChatSidebar({
               <ChevronDown size={15} className="text-(--muted)" aria-hidden="true" />
             </button>
           </div>
-        ) : null}
+        ) : (
+          <div className="mt-auto flex justify-center border-t border-(--border) p-2">
+            <button
+              type="button"
+              title={profileLabel}
+              aria-label="Account"
+              onClick={() => onComingSoon("Account")}
+              className="grid h-9 w-9 place-items-center rounded-full bg-(--foreground) text-xs font-semibold text-(--background)"
+            >
+              {initials}
+            </button>
+          </div>
+        )}
       </aside>
     </>
   );
@@ -279,10 +299,12 @@ function CollapsedButton({
   label,
   icon: Icon,
   onClick,
+  primary = false,
 }: {
   label: string;
   icon: ComponentType<{ size?: number; "aria-hidden"?: boolean }>;
   onClick: () => void;
+  primary?: boolean;
 }) {
   return (
     <button
@@ -290,7 +312,10 @@ function CollapsedButton({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="grid h-10 w-full place-items-center rounded-md text-(--muted) hover:bg-(--surface)"
+      className={`grid h-9 w-9 place-items-center rounded-lg transition ${primary
+        ? "bg-(--foreground) text-(--background) hover:opacity-90"
+        : "text-(--muted) hover:bg-(--surface-muted) hover:text-(--foreground)"
+        }`}
     >
       <Icon size={17} aria-hidden={true} />
     </button>
