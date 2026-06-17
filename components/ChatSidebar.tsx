@@ -92,19 +92,18 @@ export function ChatSidebar({
       <button
         type="button"
         aria-label="Close sidebar"
-        className={`fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px] transition lg:hidden ${
-          mobileOpen ? "block" : "hidden"
-        }`}
+        className={`fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px] transition lg:hidden ${mobileOpen ? "block" : "hidden"
+          }`}
         onClick={onCloseMobile}
       />
 
       <aside
         className={[
-          "modal-safe fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[18rem] flex-col border-r border-(--border) bg-(--sidebar) transition-transform duration-200 lg:static lg:z-auto lg:h-full lg:w-70 lg:shrink-0 lg:translate-x-0 lg:p-0",
+          "modal-safe fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[18rem] flex-col border-r border-(--border) bg-(--sidebar) transition-transform duration-200 lg:static lg:z-auto lg:h-full lg:shrink-0 lg:translate-x-0 lg:p-0",
           mobileOpen
             ? "visible translate-x-0 shadow-2xl"
             : "invisible pointer-events-none -translate-x-full lg:pointer-events-auto lg:visible lg:shadow-none",
-          collapsed ? "lg:w-19" : "",
+          collapsed ? "lg:w-19" : "lg:w-70",
         ].join(" ")}
       >
         <div className="flex items-center justify-between gap-2 px-3 pb-3 lg:pt-3">
@@ -213,11 +212,10 @@ export function ChatSidebar({
                 title={thread.title}
                 aria-label={thread.title}
                 onClick={() => onSelectThread(thread.id)}
-                className={`grid h-10 w-full place-items-center rounded-xl transition ${
-                  thread.id === activeThreadId
+                className={`grid h-10 w-full place-items-center rounded-xl transition ${thread.id === activeThreadId
                     ? "bg-(--surface-muted) text-(--foreground)"
                     : "text-(--muted) hover:bg-(--surface)"
-                }`}
+                  }`}
               >
                 <MessageCircle size={17} aria-hidden="true" />
               </button>
@@ -274,9 +272,8 @@ function SidebarAction({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left transition ${
-        active ? "bg-(--surface) text-(--foreground)" : "text-(--foreground) hover:bg-(--surface)"
-      }`}
+      className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left transition ${active ? "bg-(--surface) text-(--foreground)" : "text-(--foreground) hover:bg-(--surface)"
+        }`}
     >
       <Icon size={16} className="shrink-0 text-(--muted)" aria-hidden={true} />
       <span className="truncate">{label}</span>
@@ -397,9 +394,8 @@ function ThreadRow({
 
   return (
     <div
-      className={`group relative rounded-md transition ${
-        active ? "bg-(--surface-muted)" : "hover:bg-(--surface)"
-      }`}
+      className={`group relative rounded-md transition ${active ? "bg-(--surface-muted)" : "hover:bg-(--surface)"
+        }`}
     >
       {editing ? (
         <div className="flex min-h-9 items-center gap-1 px-2">
@@ -447,9 +443,8 @@ function ThreadRow({
           title="More options"
           aria-label={`More options for ${thread.title}`}
           onClick={() => setMenuOpen((current) => !current)}
-          className={`absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-md text-(--muted) hover:bg-(--surface) ${
-            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
-          }`}
+          className={`absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-md text-(--muted) hover:bg-(--surface) ${menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+            }`}
         >
           <MoreHorizontal size={16} aria-hidden="true" />
         </button>
@@ -503,9 +498,8 @@ function MenuItem({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-(--surface-muted) ${
-        danger ? "text-(--danger)" : "text-(--foreground)"
-      }`}
+      className={`flex h-8 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-(--surface-muted) ${danger ? "text-(--danger)" : "text-(--foreground)"
+        }`}
     >
       <Icon size={14} aria-hidden={true} />
       <span>{label}</span>
