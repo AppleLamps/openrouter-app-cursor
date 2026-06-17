@@ -1,5 +1,14 @@
 import type { Metadata, Viewport } from "next";
+import { Instrument_Serif } from "next/font/google";
 import "./globals.css";
+
+const instrumentSerif = Instrument_Serif({
+  weight: "400",
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+  variable: "--font-instrument-serif",
+  display: "swap",
+});
 
 const APP_NAME = "OpenRouter Chat";
 const APP_DESCRIPTION = "A mobile-first OpenRouter chat PWA.";
@@ -54,7 +63,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={instrumentSerif.variable}>
       <body>{children}</body>
     </html>
   );

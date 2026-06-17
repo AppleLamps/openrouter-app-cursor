@@ -189,6 +189,13 @@ export function Chat() {
   const displayName = settings.profile.displayName.trim();
   const firstName = displayName.split(" ").filter(Boolean)[0] || "";
 
+  function getTimeGreeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  }
+
   const scheduleScrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     pendingScrollBehaviorRef.current = behavior;
 
@@ -372,11 +379,11 @@ export function Chat() {
         messages: thread.messages.map((message) =>
           message.id === messageId
             ? {
-                ...message,
-                content,
-                reasoning: reasoning ?? message.reasoning,
-                usage: usage ?? message.usage,
-              }
+              ...message,
+              content,
+              reasoning: reasoning ?? message.reasoning,
+              usage: usage ?? message.usage,
+            }
             : message,
         ),
         updatedAt: new Date().toISOString(),
@@ -1006,7 +1013,7 @@ export function Chat() {
       />
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-(--background)">
-        <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-(--border) bg-(--background) px-3 md:px-5">
+        <header className={`flex h-12 shrink-0 items-center justify-between gap-3 px-3 transition-colors md:px-5 ${visibleMessages.length > 0 && hydrated ? "border-b border-(--border) bg-(--background)" : "border-b border-transparent bg-transparent"}`}>
           <div className="flex min-w-0 items-center gap-1.5">
             <button
               type="button"
@@ -1052,13 +1059,13 @@ export function Chat() {
           </div>
         ) : visibleMessages.length === 0 ? (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 pb-10 md:px-8">
-            <div className="w-full max-w-184">
+            <div className="animate-hero-fade-up w-full max-w-184">
               <div className="mb-7 flex items-center justify-center gap-3">
                 <span className="brand-burst text-4xl text-(--brand)" aria-hidden="true">
                   *
                 </span>
                 <h1 className="font-serif text-4xl leading-tight text-(--foreground) md:text-[2.75rem]">
-                  {firstName ? `Welcome, ${firstName}` : "Welcome"}
+                  {firstName ? `${getTimeGreeting()}, ${firstName}` : getTimeGreeting()}
                 </h1>
               </div>
               <p className="mx-auto mb-6 max-w-md text-center text-sm text-(--muted)">
@@ -1071,10 +1078,11 @@ export function Chat() {
                 isStreaming={isStreaming}
                 disabled={!hydrated}
                 model={settings.model}
-                placeholder="What are you working on?"
+                placeholder="What do you want to figure out today?"
                 showDisclaimer={false}
                 seed={composerSeed}
                 onOpenSettings={() => setIsSettingsOpen(true)}
+                onModelChange={(m) => setSettings((prev) => ({ ...prev, model: m }))}
                 onVoice={() => showComingSoon("Voice input")}
               />
               <StarterChips onSelect={seedComposer} />
@@ -1131,6 +1139,7 @@ export function Chat() {
                 model={settings.model}
                 placeholder="Reply..."
                 onOpenSettings={() => setIsSettingsOpen(true)}
+                onModelChange={(m) => setSettings((prev) => ({ ...prev, model: m }))}
                 onVoice={() => showComingSoon("Voice input")}
               />
             </div>
@@ -1139,7 +1148,7 @@ export function Chat() {
       </section>
 
       {noticeText ? (
-        <div className="fixed bottom-5 left-1/2 z-80 -translate-x-1/2 rounded-md border border-(--border) bg-(--foreground) px-4 py-2 text-sm text-(--background) shadow-[0_10px_30px_rgba(31,31,30,0.14)]">
+        <div className="animate-toast-slide-up fixed bottom-5 left-1/2 z-80 -translate-x-1/2 rounded-md border border-(--border) bg-(--foreground) px-4 py-2 text-sm text-(--background) shadow-[0_10px_30px_rgba(31,31,30,0.14)]">
           {noticeText}
         </div>
       ) : null}
@@ -1169,11 +1178,11 @@ const STARTER_PROMPTS: {
   icon: ComponentType<{ size?: number; className?: string; "aria-hidden"?: boolean }>;
   prompt: string;
 }[] = [
-  { label: "Draft an email", icon: Mail, prompt: "Help me draft an email to " },
-  { label: "Plan a project", icon: FolderKanban, prompt: "Help me plan a project for " },
-  { label: "Summarize", icon: FileText, prompt: "Summarize the following:\n\n" },
-  { label: "Brainstorm", icon: Lightbulb, prompt: "Let's brainstorm ideas about " },
-];
+    { label: "Draft an email", icon: Mail, prompt: "Help me draft an email to " },
+    { label: "Plan a project", icon: FolderKanban, prompt: "Help me plan a project for " },
+    { label: "Summarize", icon: FileText, prompt: "Summarize the following:\n\n" },
+    { label: "Brainstorm", icon: Lightbulb, prompt: "Let's brainstorm ideas about " },
+  ];
 
 function StarterChips({ onSelect }: { onSelect: (text: string) => void }) {
   return (

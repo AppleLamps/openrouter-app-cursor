@@ -14,7 +14,6 @@ import {
   Pencil,
   Plus,
   Search,
-  Sparkles,
   Star,
   Trash2,
   X,
@@ -110,10 +109,9 @@ export function ChatSidebar({
           <button
             type="button"
             onClick={() => onComingSoon("Home")}
-            className="inline-flex min-w-0 items-center gap-2 rounded-md px-1 py-1 text-left text-lg font-semibold text-(--foreground)"
+            className="inline-flex min-w-0 items-center rounded-md px-1 py-1 text-left"
           >
-            <Sparkles size={19} className="text-(--brand)" aria-hidden="true" />
-            {!collapsed ? <span className="truncate font-serif text-[1.35rem]">OpenRouter</span> : null}
+            {!collapsed ? <span className="truncate font-serif text-[1.35rem] font-semibold text-(--foreground)">OpenRouter</span> : null}
           </button>
           <div className="ml-auto flex items-center gap-1">
             <button
@@ -153,14 +151,10 @@ export function ChatSidebar({
             <button
               type="button"
               onClick={onNewThread}
-              className="mb-3 flex h-10 w-full items-center rounded-md px-2 text-sm text-(--foreground) hover:bg-(--surface)"
+              className="mb-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-(--border) px-3 text-sm font-medium text-(--foreground) transition hover:bg-(--surface)"
             >
-              <span className="inline-flex items-center gap-2">
-                <span className="grid h-5 w-5 place-items-center rounded-full bg-(--surface-muted)">
-                  <Plus size={14} aria-hidden="true" />
-                </span>
-                New chat
-              </span>
+              <Plus size={15} aria-hidden="true" />
+              New chat
             </button>
 
             <nav className="space-y-1 text-sm" aria-label="Primary">
@@ -177,7 +171,7 @@ export function ChatSidebar({
         )}
 
         {!collapsed ? (
-          <div className="mt-5 min-h-0 flex-1 overflow-hidden px-3">
+          <div className="mt-0 min-h-0 flex-1 overflow-hidden border-t border-(--border) px-3 pt-3">
             <div className="scroll-area h-full overflow-y-auto pr-1">
               <ThreadSection
                 label="Starred"
@@ -213,8 +207,8 @@ export function ChatSidebar({
                 aria-label={thread.title}
                 onClick={() => onSelectThread(thread.id)}
                 className={`grid h-10 w-full place-items-center rounded-xl transition ${thread.id === activeThreadId
-                    ? "bg-(--surface-muted) text-(--foreground)"
-                    : "text-(--muted) hover:bg-(--surface)"
+                  ? "bg-(--surface-muted) text-(--foreground)"
+                  : "text-(--muted) hover:bg-(--surface)"
                   }`}
               >
                 <MessageCircle size={17} aria-hidden="true" />
@@ -235,7 +229,7 @@ export function ChatSidebar({
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{profileLabel}</span>
-                <span className="block truncate text-xs text-(--muted)">Local profile</span>
+                <span className="block truncate text-xs text-(--muted)">Free plan</span>
               </span>
               <ChevronDown size={15} className="text-(--muted)" aria-hidden="true" />
             </button>
@@ -272,7 +266,7 @@ function SidebarAction({
     <button
       type="button"
       onClick={onClick}
-      className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left transition ${active ? "bg-(--surface) text-(--foreground)" : "text-(--foreground) hover:bg-(--surface)"
+      className={`flex h-9 w-full items-center gap-2 rounded-md px-2 text-left transition-colors duration-150 ${active ? "bg-(--surface) text-(--foreground)" : "text-(--foreground) hover:bg-(--surface)"
         }`}
     >
       <Icon size={16} className="shrink-0 text-(--muted)" aria-hidden={true} />
@@ -394,7 +388,7 @@ function ThreadRow({
 
   return (
     <div
-      className={`group relative rounded-md transition ${active ? "bg-(--surface-muted)" : "hover:bg-(--surface)"
+      className={`group relative rounded-md transition-colors duration-150 ${active ? "bg-(--surface-muted)" : "hover:bg-(--surface)"
         }`}
     >
       {editing ? (
@@ -427,8 +421,8 @@ function ThreadRow({
           </button>
         </div>
       ) : (
-        <button type="button" onClick={onSelect} className="flex h-9 w-full items-center gap-2 px-2 pr-9 text-left">
-          <span className="min-w-0 flex-1 truncate text-sm text-(--foreground)">{thread.title}</span>
+        <button type="button" onClick={onSelect} className="flex h-8 w-full items-center gap-2 px-2 pr-8 text-left">
+          <span className="min-w-0 flex-1 truncate text-[0.8125rem] leading-5 text-(--foreground)">{thread.title}</span>
           {matchInMessages ? (
             <span className="shrink-0 text-(--muted)" title="Match in messages" aria-label="Match in messages">
               <MessageCircle size={13} aria-hidden="true" />

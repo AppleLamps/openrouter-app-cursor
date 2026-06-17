@@ -140,7 +140,7 @@ export function MessageBubble({
     return (
       <article className="group flex justify-end">
         <div className="max-w-[86%] md:max-w-[68%]">
-          <div className="rounded-xl bg-(--user-bubble) px-4 py-2.5 text-[0.95rem] leading-6 text-(--foreground)">
+          <div className="rounded-2xl bg-(--user-bubble) px-4 py-2.5 text-[0.95rem] leading-6 text-(--foreground)">
             {editing ? (
               <textarea
                 ref={textareaRef}
@@ -289,7 +289,7 @@ function MessageActions({
 }) {
   return (
     <div
-      className={`mt-2 flex items-center gap-1 text-(--muted) opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 ${align === "right" ? "justify-end" : "justify-start"
+      className={`mt-2 flex items-center gap-1 text-(--muted) opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 ${align === "right" ? "justify-end" : "justify-start"
         }`}
     >
       {timestamp ? <span className="mr-1 text-xs">{timestamp}</span> : null}
@@ -349,7 +349,7 @@ function ActionButton({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className={`grid h-8 w-8 place-items-center rounded-md transition hover:bg-(--surface-muted) ${active ? "text-(--foreground)" : ""
+      className={`grid h-8 w-8 place-items-center rounded-full transition-colors duration-150 hover:bg-(--surface-muted) ${active ? "text-(--foreground)" : ""
         }`}
     >
       {children}
@@ -376,8 +376,8 @@ function AttachmentGrid({
           href={attachment.dataUrl}
           download={attachment.name}
           className={`group overflow-hidden rounded-xl border ${align === "right"
-              ? "border-black/5 bg-white/65"
-              : "border-(--border) bg-(--surface)"
+            ? "border-black/5 bg-white/65"
+            : "border-(--border) bg-(--surface)"
             }`}
         >
           {attachment.kind === "image" ? (

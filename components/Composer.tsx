@@ -4,18 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import {
   Braces,
   Check,
+  ChevronDown,
   FileText,
   Image as ImageIcon,
   Mic,
   Paperclip,
   Plus,
   Send,
-  Settings2,
-  SlidersHorizontal,
   Square,
   X,
 } from "lucide-react";
-import type { ChatAttachment } from "@/lib/types";
+import type { ChatAttachment, OpenRouterModel } from "@/lib/types";
 import { createId, formatBytes } from "@/lib/utils";
 
 type ComposerProps = {
@@ -28,6 +27,7 @@ type ComposerProps = {
   onSend: (message: string, attachments?: ChatAttachment[], options?: { jsonMode?: boolean }) => boolean;
   onStop: () => void;
   onOpenSettings: () => void;
+  onModelChange?: (model: string) => void;
   onVoice: () => void;
 };
 
@@ -51,6 +51,7 @@ export function Composer({
   onSend,
   onStop,
   onOpenSettings,
+  onModelChange,
   onVoice,
 }: ComposerProps) {
   const [value, setValue] = useState("");
@@ -58,6 +59,11 @@ export function Composer({
   const [jsonMode, setJsonMode] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [attachmentError, setAttachmentError] = useState("");
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [modelQuery, setModelQuery] = useState("");
+  const [pickerModels, setPickerModels] = useState<OpenRouterModel[]>([]);
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -82,6 +88,37 @@ export function Composer({
       requestAnimationFrame(() => textarea.setSelectionRange(end, end));
     }
   }, [seed]);
+
+  useEffect(() => {
+    if (!modelPickerOpen) {
+      return;
+    }
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      setPickerLoading(true);
+      try {
+        const params = new URLSearchParams({ sort: "most-popular" });
+        if (modelQuery.trim()) {
+          params.set("q", modelQuery.trim());
+        }
+        const res = await fetch(`/api/models?${params.toString()}`, { signal: controller.signal });
+        if (res.ok) {
+          const data = (await res.json()) as { data?: OpenRouterModel[] };
+          setPickerModels(data.data ?? []);
+        }
+      } catch {
+        // aborted or network error — leave previous list in place
+      } finally {
+        if (!controller.signal.aborted) {
+          setPickerLoading(false);
+        }
+      }
+    }, 200);
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [modelPickerOpen, modelQuery]);
 
   function submit() {
     const next = value.trim();
@@ -142,7 +179,7 @@ export function Composer({
 
   return (
     <form
-      className="composer-safe mx-auto flex max-w-188 flex-col gap-2"
+      className="composer-safe mx-auto flex max-w-184 flex-col gap-2"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -168,7 +205,10 @@ export function Composer({
         </p>
       ) : null}
 
-      <div className="rounded-[1.1rem] border border-(--border-strong) bg-(--surface-raised) p-3 shadow-[0_8px_24px_rgba(31,31,30,0.07)]">
+      <div className={`rounded-[1.1rem] border bg-(--surface-raised) p-3 transition-[border-color,box-shadow] duration-150 ${isFocused
+        ? "border-(--border-strong) shadow-[0_4px_20px_rgba(31,31,30,0.1)]"
+        : "border-(--border) shadow-[0_4px_16px_rgba(31,31,30,0.05)]"
+        }`}>
         <input
           ref={fileInputRef}
           type="file"
@@ -186,6 +226,8 @@ export function Composer({
             disabled={disabled}
             placeholder={placeholder}
             onChange={(event) => setValue(event.target.value)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
@@ -206,7 +248,7 @@ export function Composer({
               aria-expanded={menuOpen}
               disabled={disabled || isStreaming}
               onClick={() => setMenuOpen((current) => !current)}
-              className="grid h-9 w-9 place-items-center rounded-md text-(--foreground) transition hover:bg-(--surface-muted) disabled:cursor-not-allowed disabled:opacity-45"
+              className="grid h-9 w-9 place-items-center rounded-full text-(--foreground) transition hover:bg-(--surface-muted) disabled:cursor-not-allowed disabled:opacity-45"
             >
               <Plus size={18} aria-hidden="true" />
             </button>
@@ -271,29 +313,97 @@ export function Composer({
           </div>
 
           <div className="flex min-w-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              className="inline-flex min-w-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm text-(--muted) hover:bg-(--surface-muted)"
-            >
-              <span className="truncate">{formatModelLabel(model)}</span>
-              <SlidersHorizontal size={14} className="shrink-0" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              title="Settings"
-              aria-label="Settings"
-              onClick={onOpenSettings}
-              className="hidden h-9 w-9 place-items-center rounded-md text-(--muted) hover:bg-(--surface-muted) sm:grid"
-            >
-              <Settings2 size={17} aria-hidden="true" />
-            </button>
+            {/* Inline model picker */}
+            <div className="relative flex min-w-0 items-center">
+              <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={modelPickerOpen}
+                onClick={() => {
+                  setModelPickerOpen((o) => !o);
+                  setModelQuery("");
+                }}
+                className="inline-flex min-w-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-(--muted) transition hover:bg-(--surface-muted) hover:text-(--foreground)"
+              >
+                <span className="max-w-36 truncate">{formatModelLabel(model)}</span>
+                <ChevronDown size={13} className="shrink-0 opacity-70" aria-hidden="true" />
+              </button>
+
+              {modelPickerOpen ? (
+                <>
+                  <button
+                    type="button"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    onClick={() => setModelPickerOpen(false)}
+                    className="fixed inset-0 z-20 cursor-default"
+                  />
+                  <div
+                    role="listbox"
+                    aria-label="Select model"
+                    className="absolute bottom-full right-0 z-30 mb-2 w-72 overflow-hidden rounded-xl border border-(--border) bg-(--surface-raised) shadow-[0_10px_30px_rgba(31,31,30,0.14)]"
+                  >
+                    <div className="border-b border-(--border) px-3 py-2">
+                      <input
+                        value={modelQuery}
+                        onChange={(e) => setModelQuery(e.target.value)}
+                        placeholder="Search models…"
+                        autoFocus
+                        spellCheck={false}
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        className="w-full bg-transparent text-sm text-(--foreground) outline-none placeholder:text-(--muted)"
+                      />
+                    </div>
+                    <div className="scroll-area max-h-64 overflow-y-auto">
+                      {pickerLoading && pickerModels.length === 0 ? (
+                        <p className="px-3 py-4 text-center text-xs text-(--muted)">Loading…</p>
+                      ) : pickerModels.length === 0 ? (
+                        <p className="px-3 py-4 text-center text-xs text-(--muted)">No models found.</p>
+                      ) : (
+                        pickerModels.map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            role="option"
+                            aria-selected={m.id === model}
+                            onClick={() => {
+                              onModelChange?.(m.id);
+                              setModelPickerOpen(false);
+                            }}
+                            className={`flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm transition hover:bg-(--surface-muted) ${m.id === model ? "bg-(--surface-muted) font-medium" : "text-(--foreground)"}`}
+                          >
+                            <span className="truncate">{m.name}</span>
+                            {m.id === model ? (
+                              <Check size={14} className="shrink-0 text-(--brand)" aria-hidden="true" />
+                            ) : null}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <div className="border-t border-(--border) px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModelPickerOpen(false);
+                          onOpenSettings();
+                        }}
+                        className="text-xs text-(--muted) transition hover:text-(--foreground)"
+                      >
+                        All models in Settings →
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
             <button
               type="button"
               title="Voice input"
               aria-label="Voice input"
               onClick={onVoice}
-              className="grid h-9 w-9 place-items-center rounded-md text-(--muted) hover:bg-(--surface-muted)"
+              className="grid h-9 w-9 place-items-center rounded-full text-(--muted) transition hover:bg-(--surface-muted)"
             >
               <Mic size={17} aria-hidden="true" />
             </button>
@@ -303,7 +413,7 @@ export function Composer({
                 title="Stop generating"
                 aria-label="Stop generating"
                 onClick={onStop}
-                className="grid h-9 w-9 place-items-center rounded-md bg-(--danger) text-white transition active:scale-95"
+                className="grid h-9 w-9 place-items-center rounded-full bg-(--danger) text-white transition active:scale-95"
               >
                 <Square size={15} fill="currentColor" aria-hidden="true" />
               </button>
@@ -313,9 +423,12 @@ export function Composer({
                 title="Send"
                 aria-label="Send"
                 disabled={disabled || (!value.trim() && attachments.length === 0)}
-                className="grid h-9 w-9 place-items-center rounded-md bg-(--foreground) text-(--background) transition active:scale-95 disabled:cursor-not-allowed disabled:bg-(--surface-muted) disabled:text-(--muted)"
+                className={`grid h-9 w-9 place-items-center rounded-full bg-(--foreground) text-(--background) transition-all duration-150 active:scale-95 ${value.trim() || attachments.length > 0
+                  ? "scale-100 opacity-100"
+                  : "pointer-events-none scale-75 opacity-0"
+                  }`}
               >
-                <Send size={17} aria-hidden="true" />
+                <Send size={16} aria-hidden="true" />
               </button>
             )}
           </div>
