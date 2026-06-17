@@ -32,7 +32,16 @@ type ComposerProps = {
 };
 
 const MAX_ATTACHMENTS = 4;
-const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+// Large originals are accepted because images are downscaled before sending.
+const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
+// PDFs are sent as-is, so cap them below the serverless request-body limit.
+const MAX_PDF_BYTES = 4 * 1024 * 1024;
+// Combined request body must stay under the ~4.5 MB serverless limit (base64 inflates ~33%).
+const MAX_TOTAL_PAYLOAD_BYTES = 4 * 1024 * 1024;
+// Vision models downsample anyway; 1568px on the long edge keeps quality and shrinks payload.
+const MAX_IMAGE_DIMENSION = 1568;
+const IMAGE_OUTPUT_TYPE = "image/webp";
+const IMAGE_OUTPUT_QUALITY = 0.82;
 const SUPPORTED_MEDIA_TYPES = new Set([
   "image/png",
   "image/jpeg",
@@ -150,17 +159,27 @@ export function Composer({
       }
 
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        setAttachmentError("Each attachment must be 5 MB or smaller.");
+        setAttachmentError("Each attachment must be 12 MB or smaller.");
         continue;
       }
+
+      const isPdf = file.type === "application/pdf";
+      if (isPdf && file.size > MAX_PDF_BYTES) {
+        setAttachmentError("PDFs must be 4 MB or smaller.");
+        continue;
+      }
+
+      const processed = isPdf
+        ? { dataUrl: await readAsDataUrl(file), mediaType: file.type, size: file.size }
+        : await processImageFile(file);
 
       nextAttachments.push({
         id: createId(),
         name: file.name,
-        mediaType: file.type,
-        size: file.size,
-        dataUrl: await readAsDataUrl(file),
-        kind: file.type === "application/pdf" ? "pdf" : "image",
+        mediaType: processed.mediaType,
+        size: processed.size,
+        dataUrl: processed.dataUrl,
+        kind: isPdf ? "pdf" : "image",
       });
     }
 
@@ -169,7 +188,15 @@ export function Composer({
     }
 
     if (nextAttachments.length > 0) {
-      setAttachments((current) => [...current, ...nextAttachments]);
+      // Keep the combined request body under the serverless limit so the send doesn't 413.
+      const existingBytes = attachments.reduce((sum, item) => sum + estimateDataUrlBytes(item.dataUrl), 0);
+      const additionBytes = nextAttachments.reduce((sum, item) => sum + estimateDataUrlBytes(item.dataUrl), 0);
+
+      if (existingBytes + additionBytes > MAX_TOTAL_PAYLOAD_BYTES) {
+        setAttachmentError("These attachments are too large to send together. Remove one or use smaller files.");
+      } else {
+        setAttachments((current) => [...current, ...nextAttachments]);
+      }
     }
 
     if (fileInputRef.current) {
@@ -495,4 +522,71 @@ function readAsDataUrl(file: File) {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+async function processImageFile(
+  file: File,
+): Promise<{ dataUrl: string; mediaType: string; size: number }> {
+  const originalDataUrl = await readAsDataUrl(file);
+
+  // Animated GIFs would lose their animation through a canvas, so leave them untouched.
+  if (file.type === "image/gif") {
+    return { dataUrl: originalDataUrl, mediaType: file.type, size: estimateDataUrlBytes(originalDataUrl) };
+  }
+
+  try {
+    const compressed = await downscaleImage(originalDataUrl);
+    if (compressed && compressed.bytes < estimateDataUrlBytes(originalDataUrl)) {
+      return { dataUrl: compressed.dataUrl, mediaType: compressed.mediaType, size: compressed.bytes };
+    }
+  } catch {
+    // Fall back to the original below if the browser can't decode or encode it.
+  }
+
+  return { dataUrl: originalDataUrl, mediaType: file.type, size: estimateDataUrlBytes(originalDataUrl) };
+}
+
+function downscaleImage(
+  dataUrl: string,
+): Promise<{ dataUrl: string; bytes: number; mediaType: string } | null> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const longestEdge = Math.max(image.width, image.height);
+      const scale = longestEdge > 0 ? Math.min(1, MAX_IMAGE_DIMENSION / longestEdge) : 1;
+      const targetWidth = Math.max(1, Math.round(image.width * scale));
+      const targetHeight = Math.max(1, Math.round(image.height * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        resolve(null);
+        return;
+      }
+
+      context.drawImage(image, 0, 0, targetWidth, targetHeight);
+      // Browsers that can't encode WebP silently return PNG, so read the actual type back.
+      const output = canvas.toDataURL(IMAGE_OUTPUT_TYPE, IMAGE_OUTPUT_QUALITY);
+      resolve({
+        dataUrl: output,
+        bytes: estimateDataUrlBytes(output),
+        mediaType: dataUrlMediaType(output, IMAGE_OUTPUT_TYPE),
+      });
+    };
+    image.onerror = () => reject(new Error("Could not load image"));
+    image.src = dataUrl;
+  });
+}
+
+function dataUrlMediaType(dataUrl: string, fallback: string): string {
+  const match = /^data:([^;,]+)/.exec(dataUrl);
+  return match?.[1] ?? fallback;
+}
+
+function estimateDataUrlBytes(dataUrl: string): number {
+  const commaIndex = dataUrl.indexOf(",");
+  const base64 = commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+  return Math.floor((base64.length * 3) / 4);
 }
