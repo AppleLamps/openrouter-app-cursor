@@ -1,6 +1,7 @@
 import {
   DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MULTIMODAL_SETTINGS,
+  DEFAULT_REASONING,
   DEFAULT_RESPONSE_CACHING,
   DEFAULT_SERVER_TOOLS,
   type ChatAttachment,
@@ -10,6 +11,8 @@ import {
   type FetchEngine,
   type MessageTransformSettings,
   type MultimodalSettings,
+  type ReasoningEffort,
+  type ReasoningSettings,
   type ResponseCachingSettings,
   type SearchContextSize,
   type SearchEngine,
@@ -34,7 +37,8 @@ export function isChatMessage(value: unknown): value is ChatMessage {
     (message.createdAt === undefined || typeof message.createdAt === "string") &&
     (sources === undefined || Array.isArray(sources)) &&
     (attachments === undefined || Array.isArray(attachments)) &&
-    (files === undefined || Array.isArray(files))
+    (files === undefined || Array.isArray(files)) &&
+    (message.reasoning === undefined || typeof message.reasoning === "string")
   );
 }
 
@@ -249,6 +253,29 @@ export function normalizeResponseCaching(value: unknown): ResponseCachingSetting
   };
 }
 
+export function normalizeReasoning(value: unknown): ReasoningSettings {
+  if (!value || typeof value !== "object") {
+    return DEFAULT_REASONING;
+  }
+
+  const reasoning = value as Partial<ReasoningSettings>;
+  const effort =
+    reasoning.effort === "xhigh" ||
+      reasoning.effort === "high" ||
+      reasoning.effort === "medium" ||
+      reasoning.effort === "low" ||
+      reasoning.effort === "minimal" ||
+      reasoning.effort === "none"
+      ? (reasoning.effort as ReasoningEffort)
+      : DEFAULT_REASONING.effort;
+
+  return {
+    enabled: Boolean(reasoning.enabled),
+    effort,
+    exclude: Boolean(reasoning.exclude),
+  };
+}
+
 export function normalizeServerTools(value: unknown): ServerToolSettings {
   if (!value || typeof value !== "object") {
     return DEFAULT_SERVER_TOOLS;
@@ -301,7 +328,7 @@ export function normalizeServerTools(value: unknown): ServerToolSettings {
       enabled: Boolean((datetime as { enabled?: unknown }).enabled),
       timezone:
         typeof (datetime as { timezone?: unknown }).timezone === "string" &&
-        isValidTimezone((datetime as { timezone: string }).timezone.trim())
+          isValidTimezone((datetime as { timezone: string }).timezone.trim())
           ? (datetime as { timezone: string }).timezone.trim()
           : DEFAULT_SERVER_TOOLS.datetime.timezone,
     },

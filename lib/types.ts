@@ -6,6 +6,7 @@ export type ChatMessage = {
   sources?: ChatMessageSource[];
   attachments?: ChatAttachment[];
   files?: ChatGeneratedFile[];
+  reasoning?: string;
 };
 
 export type ChatMessageSource = {
@@ -50,6 +51,7 @@ export type ChatSettings = {
   multimodal: MultimodalSettings;
   messageTransforms: MessageTransformSettings;
   responseCaching: ResponseCachingSettings;
+  reasoning: ReasoningSettings;
 };
 
 export type SearchEngine = "auto" | "native" | "exa" | "firecrawl" | "parallel" | "perplexity";
@@ -100,6 +102,14 @@ export type MessageTransformSettings = {
 export type ResponseCachingSettings = {
   enabled: boolean;
   ttlSeconds: number;
+};
+
+export type ReasoningEffort = "xhigh" | "high" | "medium" | "low" | "minimal" | "none";
+
+export type ReasoningSettings = {
+  enabled: boolean;
+  effort: ReasoningEffort;
+  exclude: boolean;
 };
 
 export type OpenRouterModel = {
@@ -173,6 +183,12 @@ export const DEFAULT_RESPONSE_CACHING: ResponseCachingSettings = {
   ttlSeconds: 300,
 };
 
+export const DEFAULT_REASONING: ReasoningSettings = {
+  enabled: false,
+  effort: "medium",
+  exclude: false,
+};
+
 export const DEFAULT_SETTINGS: ChatSettings = {
   model: DEFAULT_MODEL,
   systemPrompt: "You are a concise, helpful assistant.",
@@ -181,6 +197,7 @@ export const DEFAULT_SETTINGS: ChatSettings = {
   multimodal: DEFAULT_MULTIMODAL_SETTINGS,
   messageTransforms: DEFAULT_MESSAGE_TRANSFORMS,
   responseCaching: DEFAULT_RESPONSE_CACHING,
+  reasoning: DEFAULT_REASONING,
 };
 
 export type ApiStatus = "checking" | "configured" | "missing" | "invalid" | "unknown";

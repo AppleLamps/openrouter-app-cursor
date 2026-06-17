@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarClock,
+  Brain,
   Check,
   ChevronDown,
   Database,
@@ -22,6 +23,7 @@ import {
   DEFAULT_MESSAGE_TRANSFORMS,
   DEFAULT_MODEL,
   DEFAULT_MULTIMODAL_SETTINGS,
+  DEFAULT_REASONING,
   DEFAULT_RESPONSE_CACHING,
   DEFAULT_SERVER_TOOLS,
   type ApiStatus,
@@ -29,6 +31,7 @@ import {
   type FetchEngine,
   type ImageGenerationMode,
   type OpenRouterModel,
+  type ReasoningEffort,
   type SearchContextSize,
   type SearchEngine,
 } from "@/lib/types";
@@ -252,11 +255,10 @@ export function ModelSettingsSection({
                   });
                   setModelQuery(model.id);
                 }}
-                className={`block min-h-16 w-full rounded-lg px-3 py-2 text-left transition active:scale-[0.99] ${
-                  settings.model === model.id
+                className={`block min-h-16 w-full rounded-lg px-3 py-2 text-left transition active:scale-[0.99] ${settings.model === model.id
                     ? "bg-(--accent-strong) text-(--background)"
                     : "bg-(--surface-raised) text-(--foreground)"
-                }`}
+                  }`}
               >
                 <span className="block truncate text-sm font-medium">{model.name}</span>
                 <span className="block truncate text-xs opacity-75">{model.id}</span>
@@ -305,6 +307,63 @@ export function ModelSettingsSection({
             className="h-11 w-full accent-(--accent-strong)"
           />
         </label>
+      </SectionCard>
+
+      <SectionCard
+        title="Reasoning"
+        description="Control extended thinking for reasoning-capable models. Adds output tokens (billed)."
+        icon={<Brain size={18} aria-hidden="true" />}
+      >
+        <ToolToggle
+          title="Extended reasoning"
+          description="Let the model think step-by-step before answering. Best on o-series, Claude, Gemini, and DeepSeek-R1."
+          enabled={settings.reasoning?.enabled ?? false}
+          onChange={(enabled) =>
+            onSettingsChange({
+              ...settings,
+              reasoning: {
+                ...(settings.reasoning ?? DEFAULT_REASONING),
+                enabled,
+              },
+            })
+          }
+        />
+
+        {settings.reasoning?.enabled ? (
+          <div className="mt-3 space-y-3 border-t border-(--border) pt-3">
+            <SelectField
+              label="Effort"
+              value={settings.reasoning.effort ?? DEFAULT_REASONING.effort}
+              onChange={(value) =>
+                onSettingsChange({
+                  ...settings,
+                  reasoning: {
+                    ...settings.reasoning,
+                    effort: value as ReasoningEffort,
+                  },
+                })
+              }
+              options={["xhigh", "high", "medium", "low", "minimal", "none"]}
+            />
+            <ToolToggle
+              title="Hide reasoning from response"
+              description="The model still reasons internally, but the trace isn't returned. Saves bandwidth."
+              enabled={settings.reasoning.exclude ?? false}
+              onChange={(exclude) =>
+                onSettingsChange({
+                  ...settings,
+                  reasoning: {
+                    ...settings.reasoning,
+                    exclude,
+                  },
+                })
+              }
+            />
+            <p className="text-xs leading-5 text-(--muted)">
+              Effort maps to OpenAI/Grok reasoning effort and Anthropic/Gemini thinking budgets. Not all models support every level; OpenRouter maps to the nearest supported value.
+            </p>
+          </div>
+        ) : null}
       </SectionCard>
     </div>
   );
@@ -831,9 +890,8 @@ function ToolToggle({
         <span className="block text-xs leading-5 text-(--muted)">{description}</span>
       </span>
       <span
-        className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition ${
-          enabled ? "justify-end bg-(--accent-strong)" : "justify-start bg-(--surface-muted)"
-        }`}
+        className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition ${enabled ? "justify-end bg-(--accent-strong)" : "justify-start bg-(--surface-muted)"
+          }`}
         aria-hidden="true"
       >
         <span className="h-5 w-5 rounded-full bg-(--background) shadow" />
@@ -867,11 +925,10 @@ function DestructiveAction({
         <button
           type="button"
           onClick={onClick}
-          className={`inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition active:scale-[0.98] ${
-            confirming
+          className={`inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition active:scale-[0.98] ${confirming
               ? "bg-red-400 text-black"
               : "border border-(--border) bg-(--surface-raised) text-(--foreground)"
-          }`}
+            }`}
         >
           {icon}
           {confirming ? `Confirm ${title.toLowerCase()}` : title}

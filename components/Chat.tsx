@@ -54,6 +54,7 @@ type KeyStatusResponse = {
 
 type ChatStreamEvent =
   | { type: "text"; text?: string }
+  | { type: "reasoning"; text?: string }
   | { type: "source"; source?: ChatMessageSource }
   | { type: "file"; file?: ChatGeneratedFile }
   | { type: "error"; error?: { message?: string } }
@@ -63,6 +64,7 @@ type StreamingDraft = {
   threadId: string;
   messageId: string;
   content: string;
+  reasoning: string;
 };
 
 const THREADS_SAVE_DEBOUNCE_MS = 750;
@@ -89,7 +91,7 @@ export function Chat() {
   const streamingFrameRef = useRef<number | null>(null);
   const threadsRef = useRef<ChatThread[]>([]);
   const autoTitleTimeoutRef = useRef<number | null>(null);
-  const scheduleAutoTitleRef = useRef<(threadId: string) => void>(() => {});
+  const scheduleAutoTitleRef = useRef<(threadId: string) => void>(() => { });
 
   const setStreamingActive = useCallback((active: boolean) => {
     isStreamingRef.current = active;
@@ -226,8 +228,8 @@ export function Chat() {
     setStreamingDraft(null);
   }, []);
 
-  const scheduleStreamingDraft = useCallback((threadId: string, messageId: string, content: string) => {
-    streamingDraftRef.current = { threadId, messageId, content };
+  const scheduleStreamingDraft = useCallback((threadId: string, messageId: string, content: string, reasoning: string) => {
+    streamingDraftRef.current = { threadId, messageId, content, reasoning };
 
     if (streamingFrameRef.current !== null) {
       return;
@@ -243,11 +245,13 @@ export function Chat() {
   }, []);
 
   const updateAssistantMessage = useCallback(
-    (threadId: string, messageId: string, content: string) => {
+    (threadId: string, messageId: string, content: string, reasoning?: string) => {
       updateThread(threadId, (thread) => ({
         ...thread,
         messages: thread.messages.map((message) =>
-          message.id === messageId ? { ...message, content } : message,
+          message.id === messageId
+            ? { ...message, content, reasoning: reasoning ?? message.reasoning }
+            : message,
         ),
         updatedAt: new Date().toISOString(),
       }));
@@ -256,9 +260,9 @@ export function Chat() {
   );
 
   const commitAssistantMessage = useCallback(
-    (threadId: string, messageId: string, content: string) => {
+    (threadId: string, messageId: string, content: string, reasoning?: string) => {
       clearStreamingDraft();
-      updateAssistantMessage(threadId, messageId, content);
+      updateAssistantMessage(threadId, messageId, content, reasoning);
     },
     [clearStreamingDraft, updateAssistantMessage],
   );
@@ -354,6 +358,7 @@ export function Chat() {
       const controller = new AbortController();
       abortRef.current = controller;
       let streamedContent = "";
+      let streamedReasoning = "";
       let completedSuccessfully = false;
 
       void (async () => {
@@ -373,6 +378,7 @@ export function Chat() {
               multimodal: settings.multimodal,
               messageTransforms: settings.messageTransforms,
               responseCaching: settings.responseCaching,
+              reasoning: settings.reasoning,
             }),
             signal: controller.signal,
           });
@@ -395,7 +401,7 @@ export function Chat() {
           const decoder = new TextDecoder();
           let buffer = "";
 
-          for (;;) {
+          for (; ;) {
             const { done, value } = await reader.read();
             if (done) {
               break;
@@ -404,7 +410,11 @@ export function Chat() {
             buffer = processStreamEvents(buffer, {
               onText: (text) => {
                 streamedContent += text;
-                scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent);
+                scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent, streamedReasoning);
+              },
+              onReasoning: (text) => {
+                streamedReasoning += text;
+                scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent, streamedReasoning);
               },
               onSource: (source) => addAssistantSource(threadId, assistantMessage.id, source),
               onFile: (file) => addAssistantFile(threadId, assistantMessage.id, file),
@@ -420,7 +430,11 @@ export function Chat() {
           processStreamEvents(`${buffer}\n`, {
             onText: (text) => {
               streamedContent += text;
-              scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent);
+              scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent, streamedReasoning);
+            },
+            onReasoning: (text) => {
+              streamedReasoning += text;
+              scheduleStreamingDraft(threadId, assistantMessage.id, streamedContent, streamedReasoning);
             },
             onSource: (source) => addAssistantSource(threadId, assistantMessage.id, source),
             onFile: (file) => addAssistantFile(threadId, assistantMessage.id, file),
@@ -434,6 +448,7 @@ export function Chat() {
             threadId,
             assistantMessage.id,
             streamedContent.trim() ? streamedContent : "No response.",
+            streamedReasoning.trim() ? streamedReasoning : undefined,
           );
           completedSuccessfully = true;
         } catch (error) {
@@ -442,6 +457,7 @@ export function Chat() {
               threadId,
               assistantMessage.id,
               streamedContent.trim() ? streamedContent : "Generation stopped.",
+              streamedReasoning.trim() ? streamedReasoning : undefined,
             );
             setStatusText("Generation stopped.");
             return;
@@ -917,12 +933,15 @@ export function Chat() {
                   isStreaming && message.id === visibleMessages.at(-1)?.id && message.role === "assistant";
                 const contentOverride =
                   streamingDraft?.messageId === message.id ? streamingDraft.content : undefined;
+                const reasoningOverride =
+                  streamingDraft?.messageId === message.id ? streamingDraft.reasoning : undefined;
 
                 return (
                   <MessageBubble
                     key={message.id}
                     message={message}
                     contentOverride={contentOverride}
+                    reasoningOverride={reasoningOverride}
                     isStreaming={isActiveStream}
                     onRetry={message.role === "assistant" ? () => retryAssistantMessage(message.id) : undefined}
                     onEditMessage={
@@ -1041,6 +1060,7 @@ function processStreamEvents(
   buffer: string,
   handlers: {
     onText: (text: string) => void;
+    onReasoning: (text: string) => void;
     onSource: (source: ChatMessageSource) => void;
     onFile: (file: ChatGeneratedFile) => void;
     onError: (message: string) => void;
@@ -1058,6 +1078,9 @@ function processStreamEvents(
       const event = JSON.parse(line) as ChatStreamEvent;
       if (event.type === "text" && typeof event.text === "string") {
         handlers.onText(event.text);
+      }
+      if (event.type === "reasoning" && typeof event.text === "string") {
+        handlers.onReasoning(event.text);
       }
       if (event.type === "source" && isMessageSource(event.source)) {
         handlers.onSource(event.source);

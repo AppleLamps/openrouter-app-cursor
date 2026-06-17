@@ -12,6 +12,7 @@ import {
   isChatThread,
   normalizeMessageTransforms,
   normalizeMultimodalSettings,
+  normalizeReasoning,
   normalizeResponseCaching,
   normalizeServerTools,
 } from "@/lib/validation";
@@ -56,6 +57,7 @@ function normalizeSettings(value: unknown): ChatSettings {
     multimodal: normalizeMultimodalSettings(settings.multimodal),
     messageTransforms: normalizeMessageTransforms(settings.messageTransforms),
     responseCaching: normalizeResponseCaching(settings.responseCaching),
+    reasoning: normalizeReasoning(settings.reasoning),
   };
 }
 

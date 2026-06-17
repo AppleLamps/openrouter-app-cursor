@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
+  Brain,
   Check,
+  ChevronDown,
   Copy,
   Download,
   FileText,
@@ -24,6 +26,7 @@ import { formatBytes } from "@/lib/utils";
 type MessageBubbleProps = {
   message: ChatMessage;
   contentOverride?: string;
+  reasoningOverride?: string;
   isStreaming?: boolean;
   showThinking?: boolean;
   onRetry?: () => void;
@@ -36,6 +39,7 @@ type Feedback = "up" | "down" | null;
 export function MessageBubble({
   message,
   contentOverride,
+  reasoningOverride,
   isStreaming = false,
   showThinking = false,
   onRetry,
@@ -44,6 +48,7 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const isUser = message.role === "user";
   const displayContent = contentOverride ?? message.content;
+  const displayReasoning = reasoningOverride ?? message.reasoning ?? "";
   const attachments = message.attachments ?? [];
   const files = message.files ?? [];
   const [copied, setCopied] = useState(false);
@@ -51,6 +56,7 @@ export function MessageBubble({
   const [speaking, setSpeaking] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(message.content);
+  const [reasoningOpen, setReasoningOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -180,9 +186,9 @@ export function MessageBubble({
               onEdit={
                 onEditMessage
                   ? () => {
-                      setDraft(message.content);
-                      setEditing(true);
-                    }
+                    setDraft(message.content);
+                    setEditing(true);
+                  }
                   : undefined
               }
               onFork={onForkFromMessage ? () => onForkFromMessage(message.id) : undefined}
@@ -195,7 +201,7 @@ export function MessageBubble({
 
   return (
     <article className="group max-w-184">
-      {showThinking ? (
+      {showThinking && !displayReasoning ? (
         <button
           type="button"
           className="mb-3 inline-flex h-8 items-center gap-2 rounded-md border border-(--border) bg-(--surface) px-3 text-xs text-(--muted)"
@@ -203,6 +209,30 @@ export function MessageBubble({
           <TypingIndicator />
           Thought for a moment
         </button>
+      ) : null}
+
+      {displayReasoning ? (
+        <div className="mb-3 rounded-xl border border-(--border) bg-(--surface) text-sm">
+          <button
+            type="button"
+            onClick={() => setReasoningOpen((current) => !current)}
+            className="flex min-h-10 w-full items-center gap-2 px-3 text-left text-xs font-medium text-(--muted) transition hover:text-(--foreground)"
+            aria-expanded={reasoningOpen}
+          >
+            <Brain size={14} aria-hidden="true" />
+            <span>{isStreaming && !displayContent ? "Thinking…" : "Reasoning"}</span>
+            <ChevronDown
+              size={14}
+              aria-hidden="true"
+              className={`ml-auto shrink-0 transition ${reasoningOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          {reasoningOpen || (isStreaming && !displayContent) ? (
+            <div className="border-t border-(--border) px-3 py-2.5 text-[0.85rem] leading-6 text-(--muted)">
+              <MarkdownMessage content={displayReasoning} deferRichBlocks={isStreaming} />
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {displayContent ? (
@@ -258,9 +288,8 @@ function MessageActions({
 }) {
   return (
     <div
-      className={`mt-2 flex items-center gap-1 text-(--muted) opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 ${
-        align === "right" ? "justify-end" : "justify-start"
-      }`}
+      className={`mt-2 flex items-center gap-1 text-(--muted) opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 ${align === "right" ? "justify-end" : "justify-start"
+        }`}
     >
       {timestamp ? <span className="mr-1 text-xs">{timestamp}</span> : null}
       <ActionButton label={copied ? "Copied" : "Copy"} onClick={onCopy}>
@@ -319,9 +348,8 @@ function ActionButton({
       title={label}
       aria-label={label}
       onClick={onClick}
-      className={`grid h-8 w-8 place-items-center rounded-md transition hover:bg-(--surface-muted) ${
-        active ? "text-(--foreground)" : ""
-      }`}
+      className={`grid h-8 w-8 place-items-center rounded-md transition hover:bg-(--surface-muted) ${active ? "text-(--foreground)" : ""
+        }`}
     >
       {children}
     </button>
@@ -346,11 +374,10 @@ function AttachmentGrid({
           key={attachment.id}
           href={attachment.dataUrl}
           download={attachment.name}
-          className={`group overflow-hidden rounded-xl border ${
-            align === "right"
+          className={`group overflow-hidden rounded-xl border ${align === "right"
               ? "border-black/5 bg-white/65"
               : "border-(--border) bg-(--surface)"
-          }`}
+            }`}
         >
           {attachment.kind === "image" ? (
             <img

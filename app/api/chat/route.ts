@@ -18,6 +18,7 @@ import {
   normalizeFetchEngine,
   normalizeMessageTransforms,
   normalizeMultimodalSettings,
+  normalizeReasoning,
   normalizeResponseCaching,
   normalizeSearchEngine,
 } from "@/lib/validation";
@@ -35,6 +36,7 @@ type ChatRequestBody = {
   multimodal?: unknown;
   messageTransforms?: unknown;
   responseCaching?: unknown;
+  reasoning?: unknown;
 };
 
 type OpenRouterServerTool = {
@@ -54,8 +56,13 @@ type MessageTransformValidation = {
   providerOptions: Record<string, JSONValue>;
 };
 
+type ReasoningValidation = {
+  providerOptions: Record<string, JSONValue>;
+};
+
 type StreamEvent =
   | { type: "text"; text: string }
+  | { type: "reasoning"; text: string }
   | { type: "source"; source: ChatMessageSource }
   | { type: "file"; file: ChatGeneratedFile }
   | { type: "error"; error: { code: PublicErrorCode; message: string } }
@@ -99,6 +106,7 @@ export async function POST(req: Request) {
     const openrouterOptions = mergeOpenRouterOptions(
       validated.multimodal.providerOptions,
       validated.messageTransforms.providerOptions,
+      validated.reasoning.providerOptions,
       validated.serverTools.tools.length > 0 ? { tools: validated.serverTools.tools } : undefined,
     );
 
@@ -119,23 +127,24 @@ export async function POST(req: Request) {
 
 function validateRequestBody(body: ChatRequestBody):
   | {
-      ok: true;
-      apiKey: string;
-      messages: ModelMessage[];
-      model: string;
-      systemPrompt: string;
-      temperature: number;
-      serverTools: ServerToolValidation;
-      multimodal: MultimodalValidation;
-      messageTransforms: MessageTransformValidation;
-      responseCaching: ResponseCachingSettings;
-    }
+    ok: true;
+    apiKey: string;
+    messages: ModelMessage[];
+    model: string;
+    systemPrompt: string;
+    temperature: number;
+    serverTools: ServerToolValidation;
+    multimodal: MultimodalValidation;
+    messageTransforms: MessageTransformValidation;
+    responseCaching: ResponseCachingSettings;
+    reasoning: ReasoningValidation;
+  }
   | {
-      ok: false;
-      status: number;
-      code: PublicErrorCode;
-      message: string;
-    } {
+    ok: false;
+    status: number;
+    code: PublicErrorCode;
+    message: string;
+  } {
   const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
   if (!apiKey) {
     return {
@@ -209,6 +218,7 @@ function validateRequestBody(body: ChatRequestBody):
     multimodal: validateMultimodal(body.multimodal, chatMessages),
     messageTransforms: validateMessageTransforms(body.messageTransforms),
     responseCaching: normalizeResponseCaching(body.responseCaching),
+    reasoning: validateReasoning(body.reasoning),
   };
 }
 
@@ -300,7 +310,7 @@ async function createPrimedEventResponse(fullStream: AsyncIterable<ChatTextStrea
   let firstChunk: ChatTextStreamPart;
 
   try {
-    for (;;) {
+    for (; ;) {
       const chunk = await iterator.next();
       if (chunk.done) {
         return jsonError(
@@ -330,7 +340,7 @@ async function createPrimedEventResponse(fullStream: AsyncIterable<ChatTextStrea
       enqueueStreamPart(controller, encoder, firstChunk);
 
       try {
-        for (;;) {
+        for (; ;) {
           const chunk = await iterator.next();
           if (chunk.done) {
             enqueueEvent(controller, encoder, { type: "done" });
@@ -369,6 +379,7 @@ async function createPrimedEventResponse(fullStream: AsyncIterable<ChatTextStrea
 function isRenderableStreamPart(part: ChatTextStreamPart) {
   return (
     (part.type === "text-delta" && Boolean(part.text)) ||
+    (part.type === "reasoning-delta" && Boolean(part.text)) ||
     (part.type === "source" && part.sourceType === "url") ||
     part.type === "file"
   );
@@ -396,6 +407,11 @@ function enqueueStreamPart(
 ) {
   if (part.type === "text-delta" && part.text) {
     enqueueEvent(controller, encoder, { type: "text", text: part.text });
+    return;
+  }
+
+  if (part.type === "reasoning-delta" && part.text) {
+    enqueueEvent(controller, encoder, { type: "reasoning", text: part.text });
     return;
   }
 
@@ -457,8 +473,8 @@ function validateServerTools(value: unknown): ServerToolValidation {
       ),
       search_context_size:
         webSearch?.searchContextSize === "low" ||
-        webSearch?.searchContextSize === "medium" ||
-        webSearch?.searchContextSize === "high"
+          webSearch?.searchContextSize === "medium" ||
+          webSearch?.searchContextSize === "high"
           ? webSearch.searchContextSize
           : undefined,
       allowed_domains: allowedDomains,
@@ -547,6 +563,22 @@ function validateMessageTransforms(value: unknown): MessageTransformValidation {
       plugins: [plugin],
     },
   };
+}
+
+function validateReasoning(value: unknown): ReasoningValidation {
+  const settings = normalizeReasoning(value);
+  if (!settings.enabled) {
+    return { providerOptions: {} };
+  }
+
+  const reasoning: Record<string, JSONValue> = {
+    effort: settings.effort,
+  };
+  if (settings.exclude) {
+    reasoning.exclude = true;
+  }
+
+  return { providerOptions: { reasoning } };
 }
 
 function getRecord(value: unknown): Record<string, unknown> | null {
@@ -650,8 +682,8 @@ function isAbortError(error: unknown) {
   return (
     error instanceof DOMException && error.name === "AbortError"
   ) || (
-    error instanceof Error && /aborted|abort/i.test(error.message)
-  );
+      error instanceof Error && /aborted|abort/i.test(error.message)
+    );
 }
 
 function jsonError(message: string, status: number, code: PublicErrorCode) {
