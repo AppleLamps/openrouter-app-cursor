@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Braces,
+  Check,
   FileText,
   Image as ImageIcon,
   Mic,
   Paperclip,
+  Plus,
   Send,
   Settings2,
   SlidersHorizontal,
@@ -20,6 +22,9 @@ type ComposerProps = {
   isStreaming: boolean;
   disabled?: boolean;
   model: string;
+  placeholder?: string;
+  showDisclaimer?: boolean;
+  seed?: { id: string; text: string } | null;
   onSend: (message: string, attachments?: ChatAttachment[], options?: { jsonMode?: boolean }) => boolean;
   onStop: () => void;
   onOpenSettings: () => void;
@@ -40,6 +45,9 @@ export function Composer({
   isStreaming,
   disabled = false,
   model,
+  placeholder = "Write a message...",
+  showDisclaimer = true,
+  seed = null,
   onSend,
   onStop,
   onOpenSettings,
@@ -48,6 +56,7 @@ export function Composer({
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [jsonMode, setJsonMode] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [attachmentError, setAttachmentError] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -60,6 +69,19 @@ export function Composer({
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 148)}px`;
   }, [value]);
+
+  useEffect(() => {
+    if (!seed) {
+      return;
+    }
+    setValue(seed.text);
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.focus();
+      const end = seed.text.length;
+      requestAnimationFrame(() => textarea.setSelectionRange(end, end));
+    }
+  }, [seed]);
 
   function submit() {
     const next = value.trim();
@@ -162,7 +184,7 @@ export function Composer({
             value={value}
             rows={1}
             disabled={disabled}
-            placeholder="Write a message..."
+            placeholder={placeholder}
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
@@ -175,47 +197,94 @@ export function Composer({
         </label>
 
         <div className="flex items-center justify-between gap-3 pt-2">
-          <div className="flex items-center gap-1">
+          <div className="relative flex items-center gap-1.5">
             <button
               type="button"
-              title="Attach image or PDF"
-              aria-label="Attach image or PDF"
-              disabled={disabled || isStreaming || attachments.length >= MAX_ATTACHMENTS}
-              onClick={() => fileInputRef.current?.click()}
+              title="Add attachment or tool"
+              aria-label="Add attachment or tool"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              disabled={disabled || isStreaming}
+              onClick={() => setMenuOpen((current) => !current)}
               className="grid h-9 w-9 place-items-center rounded-md text-(--foreground) transition hover:bg-(--surface-muted) disabled:cursor-not-allowed disabled:opacity-45"
             >
-              <Paperclip size={18} aria-hidden="true" />
+              <Plus size={18} aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              title={jsonMode ? "JSON mode on" : "JSON mode off"}
-              aria-label={jsonMode ? "Disable JSON mode" : "Enable JSON mode"}
-              aria-pressed={jsonMode}
-              disabled={disabled || isStreaming}
-              onClick={() => setJsonMode((current) => !current)}
-              className={`grid h-9 w-9 place-items-center rounded-md transition hover:bg-(--surface-muted) disabled:cursor-not-allowed disabled:opacity-45 ${
-                jsonMode ? "bg-(--surface-muted) text-(--foreground)" : "text-(--muted)"
-              }`}
-            >
-              <Braces size={18} aria-hidden="true" />
-            </button>
+
+            {jsonMode ? (
+              <button
+                type="button"
+                title="JSON mode on — click to turn off"
+                aria-label="Turn off JSON mode"
+                onClick={() => setJsonMode(false)}
+                className="inline-flex h-7 items-center gap-1 rounded-md bg-(--surface-muted) px-2 text-xs font-medium text-(--foreground)"
+              >
+                <Braces size={13} aria-hidden="true" />
+                JSON
+                <X size={12} aria-hidden="true" />
+              </button>
+            ) : null}
+
+            {menuOpen ? (
+              <>
+                <button
+                  type="button"
+                  aria-hidden="true"
+                  tabIndex={-1}
+                  onClick={() => setMenuOpen(false)}
+                  className="fixed inset-0 z-20 cursor-default"
+                />
+                <div
+                  role="menu"
+                  className="absolute bottom-full left-0 z-30 mb-2 w-56 rounded-xl border border-(--border) bg-(--surface-raised) p-1 text-sm shadow-[0_10px_30px_rgba(31,31,30,0.14)]"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={attachments.length >= MAX_ATTACHMENTS}
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                      setMenuOpen(false);
+                    }}
+                    className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-(--foreground) transition hover:bg-(--surface-muted) disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <Paperclip size={16} aria-hidden="true" />
+                    Attach image or PDF
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={jsonMode}
+                    onClick={() => {
+                      setJsonMode((current) => !current);
+                      setMenuOpen(false);
+                    }}
+                    className="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-(--foreground) transition hover:bg-(--surface-muted)"
+                  >
+                    <Braces size={16} aria-hidden="true" />
+                    JSON mode
+                    {jsonMode ? <Check size={15} className="ml-auto text-(--brand)" aria-hidden="true" /> : null}
+                  </button>
+                </div>
+              </>
+            ) : null}
           </div>
 
           <div className="flex min-w-0 items-center gap-1.5">
             <button
               type="button"
               onClick={onOpenSettings}
-              className="hidden min-w-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm text-(--muted) hover:bg-(--surface-muted) sm:inline-flex"
+              className="inline-flex min-w-0 items-center gap-1 rounded-md px-2 py-1.5 text-sm text-(--muted) hover:bg-(--surface-muted)"
             >
               <span className="truncate">{formatModelLabel(model)}</span>
-              <SlidersHorizontal size={14} aria-hidden="true" />
+              <SlidersHorizontal size={14} className="shrink-0" aria-hidden="true" />
             </button>
             <button
               type="button"
               title="Settings"
               aria-label="Settings"
               onClick={onOpenSettings}
-              className="grid h-9 w-9 place-items-center rounded-md text-(--muted) hover:bg-(--surface-muted)"
+              className="hidden h-9 w-9 place-items-center rounded-md text-(--muted) hover:bg-(--surface-muted) sm:grid"
             >
               <Settings2 size={17} aria-hidden="true" />
             </button>
@@ -253,9 +322,11 @@ export function Composer({
         </div>
       </div>
 
-      <p className="text-center text-xs text-(--muted)">
-        AI can make mistakes. Please double-check important details.
-      </p>
+      {showDisclaimer ? (
+        <p className="text-center text-xs text-(--muted)">
+          AI can make mistakes. Please double-check important details.
+        </p>
+      ) : null}
     </form>
   );
 }

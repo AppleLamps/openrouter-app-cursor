@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Menu, MoreHorizontal, Share2 } from "lucide-react";
+import type { ComponentType } from "react";
+import { FileText, FolderKanban, Lightbulb, Mail, Menu, MoreHorizontal, Share2 } from "lucide-react";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { Composer } from "@/components/Composer";
 import { MessageBubble } from "@/components/MessageBubble";
@@ -87,6 +88,7 @@ export function Chat() {
   const [noticeText, setNoticeText] = useState("");
   const [importNotice, setImportNotice] = useState("");
   const [streamingDraft, setStreamingDraft] = useState<StreamingDraft | null>(null);
+  const [composerSeed, setComposerSeed] = useState<{ id: string; text: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isStreamingRef = useRef(false);
@@ -556,6 +558,7 @@ export function Chat() {
     setActiveThreadId(thread.id);
     setStatusText("");
     setSidebarOpen(false);
+    setComposerSeed(null);
   }, []);
 
   const selectThread = useCallback((threadId: string) => {
@@ -563,6 +566,7 @@ export function Chat() {
     setActiveThreadId(threadId);
     setStatusText("");
     setSidebarOpen(false);
+    setComposerSeed(null);
   }, []);
 
   const renameThread = useCallback(
@@ -635,6 +639,10 @@ export function Chat() {
   const showComingSoon = useCallback((label: string) => {
     setNoticeText(`${label} is coming soon.`);
     window.setTimeout(() => setNoticeText(""), 1800);
+  }, []);
+
+  const seedComposer = useCallback((text: string) => {
+    setComposerSeed({ id: createId(), text });
   }, []);
 
   const renameActiveThread = useCallback(() => {
@@ -921,77 +929,95 @@ export function Chat() {
           </div>
         </header>
 
-        <section
-          ref={scrollRef}
-          className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-7 md:px-8"
-          aria-label="Chat messages"
-        >
-          {!hydrated ? (
-            <div className="flex min-h-full items-center justify-center px-6 text-center text-sm text-(--muted)">
-              Loading chat...
-            </div>
-          ) : visibleMessages.length === 0 ? (
-            <div className="flex min-h-full items-center justify-center px-2 pb-20 text-center">
-              <div className="w-full max-w-184">
-                <div className="mb-8 flex items-center justify-center gap-3">
-                  <span className="brand-burst text-4xl text-(--brand)" aria-hidden="true">
-                    *
-                  </span>
-                  <h1 className="font-serif text-4xl leading-tight text-(--foreground) md:text-[2.75rem]">
-                    Lamps returns!
-                  </h1>
-                </div>
-                <p className="mx-auto max-w-md text-sm text-(--muted)">
-                  Draft an email, plan a project, summarize a document, or keep a thought moving.
-                </p>
+        {!hydrated ? (
+          <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-sm text-(--muted)">
+            Loading chat...
+          </div>
+        ) : visibleMessages.length === 0 ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 pb-10 md:px-8">
+            <div className="w-full max-w-184">
+              <div className="mb-7 flex items-center justify-center gap-3">
+                <span className="brand-burst text-4xl text-(--brand)" aria-hidden="true">
+                  *
+                </span>
+                <h1 className="font-serif text-4xl leading-tight text-(--foreground) md:text-[2.75rem]">
+                  Lamps returns!
+                </h1>
               </div>
+              <p className="mx-auto mb-6 max-w-md text-center text-sm text-(--muted)">
+                Draft an email, plan a project, summarize a document, or keep a thought moving.
+              </p>
+              <Composer
+                key={activeThreadId}
+                onSend={sendMessage}
+                onStop={stopStreaming}
+                isStreaming={isStreaming}
+                disabled={!hydrated}
+                model={settings.model}
+                placeholder="What are you working on?"
+                showDisclaimer={false}
+                seed={composerSeed}
+                onOpenSettings={() => setIsSettingsOpen(true)}
+                onVoice={() => showComingSoon("Voice input")}
+              />
+              <StarterChips onSelect={seedComposer} />
             </div>
-          ) : (
-            <div className="mx-auto w-full max-w-184 space-y-9">
-              {visibleMessages.map((message, index) => {
-                const isActiveStream =
-                  isStreaming && message.id === visibleMessages.at(-1)?.id && message.role === "assistant";
-                const contentOverride =
-                  streamingDraft?.messageId === message.id ? streamingDraft.content : undefined;
-                const reasoningOverride =
-                  streamingDraft?.messageId === message.id ? streamingDraft.reasoning : undefined;
+          </div>
+        ) : (
+          <>
+            <section
+              ref={scrollRef}
+              className="scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-7 md:px-8"
+              aria-label="Chat messages"
+            >
+              <div className="mx-auto w-full max-w-184 space-y-6">
+                {visibleMessages.map((message, index) => {
+                  const isActiveStream =
+                    isStreaming && message.id === visibleMessages.at(-1)?.id && message.role === "assistant";
+                  const contentOverride =
+                    streamingDraft?.messageId === message.id ? streamingDraft.content : undefined;
+                  const reasoningOverride =
+                    streamingDraft?.messageId === message.id ? streamingDraft.reasoning : undefined;
 
-                return (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    contentOverride={contentOverride}
-                    reasoningOverride={reasoningOverride}
-                    isStreaming={isActiveStream}
-                    onRetry={message.role === "assistant" ? () => retryAssistantMessage(message.id) : undefined}
-                    onEditMessage={
-                      message.role === "user" ? (messageId, content) => editUserMessage(messageId, content) : undefined
-                    }
-                    onForkFromMessage={(messageId) => forkFromMessage(messageId)}
-                    showThinking={message.role === "assistant" && index === visibleMessages.length - 1 && isStreaming}
-                  />
-                );
-              })}
+                  return (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      contentOverride={contentOverride}
+                      reasoningOverride={reasoningOverride}
+                      isStreaming={isActiveStream}
+                      onRetry={message.role === "assistant" ? () => retryAssistantMessage(message.id) : undefined}
+                      onEditMessage={
+                        message.role === "user" ? (messageId, content) => editUserMessage(messageId, content) : undefined
+                      }
+                      onForkFromMessage={(messageId) => forkFromMessage(messageId)}
+                      showThinking={message.role === "assistant" && index === visibleMessages.length - 1 && isStreaming}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+
+            <div className="shrink-0 bg-linear-to-t from-(--background) via-(--background) to-transparent px-4 pb-3 md:px-8">
+              {statusText ? (
+                <p className="mx-auto max-w-184 pb-2 text-xs text-(--muted)" role="status">
+                  {statusText}
+                </p>
+              ) : null}
+              <Composer
+                key={activeThreadId}
+                onSend={sendMessage}
+                onStop={stopStreaming}
+                isStreaming={isStreaming}
+                disabled={!hydrated}
+                model={settings.model}
+                placeholder="Reply to Lamps…"
+                onOpenSettings={() => setIsSettingsOpen(true)}
+                onVoice={() => showComingSoon("Voice input")}
+              />
             </div>
-          )}
-        </section>
-
-        <div className="shrink-0 bg-linear-to-t from-(--background) via-(--background) to-transparent px-4 pb-3 md:px-8">
-          {statusText ? (
-            <p className="mx-auto max-w-184 pb-2 text-xs text-(--muted)" role="status">
-              {statusText}
-            </p>
-          ) : null}
-          <Composer
-            onSend={sendMessage}
-            onStop={stopStreaming}
-            isStreaming={isStreaming}
-            disabled={!hydrated}
-            model={settings.model}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            onVoice={() => showComingSoon("Voice input")}
-          />
-        </div>
+          </>
+        )}
       </section>
 
       {noticeText ? (
@@ -1017,6 +1043,35 @@ export function Chat() {
         canExportCurrentThread={Boolean(activeThread && activeThread.messages.length > 0)}
       />
     </main>
+  );
+}
+
+const STARTER_PROMPTS: {
+  label: string;
+  icon: ComponentType<{ size?: number; className?: string; "aria-hidden"?: boolean }>;
+  prompt: string;
+}[] = [
+  { label: "Draft an email", icon: Mail, prompt: "Help me draft an email to " },
+  { label: "Plan a project", icon: FolderKanban, prompt: "Help me plan a project for " },
+  { label: "Summarize", icon: FileText, prompt: "Summarize the following:\n\n" },
+  { label: "Brainstorm", icon: Lightbulb, prompt: "Let's brainstorm ideas about " },
+];
+
+function StarterChips({ onSelect }: { onSelect: (text: string) => void }) {
+  return (
+    <div className="mt-4 flex flex-wrap justify-center gap-2">
+      {STARTER_PROMPTS.map(({ label, icon: Icon, prompt }) => (
+        <button
+          key={label}
+          type="button"
+          onClick={() => onSelect(prompt)}
+          className="inline-flex h-9 items-center gap-2 rounded-lg border border-(--border) bg-(--surface-raised) px-3 text-sm text-(--foreground) shadow-[0_1px_2px_rgba(31,31,30,0.05)] transition hover:bg-(--surface-muted)"
+        >
+          <Icon size={15} className="text-(--brand)" aria-hidden={true} />
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 

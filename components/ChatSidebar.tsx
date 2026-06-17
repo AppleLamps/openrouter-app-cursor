@@ -3,15 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentType } from "react";
 import {
-  BriefcaseBusiness,
   Check,
   ChevronDown,
-  Code2,
   FolderKanban,
   Home,
   MessageCircle,
   MoreHorizontal,
-  Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
@@ -43,12 +40,6 @@ type ChatSidebarProps = {
   onToggleStarred: (threadId: string) => void;
   onComingSoon: (label: string) => void;
 };
-
-const PRODUCT_LINKS = [
-  { label: "Code", icon: Code2 },
-  { label: "Cowork", icon: BriefcaseBusiness },
-  { label: "Design", icon: Palette },
-];
 
 export function ChatSidebar({
   threads,
@@ -172,7 +163,6 @@ export function ChatSidebar({
             <nav className="space-y-1 text-sm" aria-label="Primary">
               <SidebarAction icon={MessageCircle} label="Chats" active onClick={() => setQuery("")} />
               <SidebarAction icon={FolderKanban} label="Projects" onClick={() => onComingSoon("Projects")} />
-              <SidebarAction icon={Sparkles} label="Artifacts" onClick={() => onComingSoon("Artifacts")} />
               <SidebarAction icon={Home} label="Customize" onClick={() => onComingSoon("Customize")} />
             </nav>
           </div>
@@ -185,13 +175,6 @@ export function ChatSidebar({
 
         {!collapsed ? (
           <div className="mt-5 min-h-0 flex-1 overflow-hidden px-3">
-            <SectionHeading label="Products" />
-            <div className="mb-5 space-y-1">
-              {PRODUCT_LINKS.map(({ label, icon }) => (
-                <SidebarAction key={label} icon={icon} label={label} onClick={() => onComingSoon(label)} />
-              ))}
-            </div>
-
             <div className="scroll-area h-full overflow-y-auto pr-1">
               <ThreadSection
                 label="Starred"
