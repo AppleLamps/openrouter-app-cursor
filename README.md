@@ -19,12 +19,13 @@ Chat uses the OpenRouter API key saved in the app Settings screen. `OPENROUTER_A
 
 ## Settings
 
-Settings uses a guided four-section layout with mobile-friendly segmented navigation. Advanced tool, multimodal, and caching controls are collapsed by default.
+Settings uses a guided four-section layout with mobile-friendly segmented navigation. Advanced web tool, multimodal, and caching controls are collapsed by default.
 
-- Setup: add, validate, save, or remove the local OpenRouter API key.
-- Model: search current OpenRouter models, choose or type a custom model id, and edit the system prompt and temperature. Model search is powered by `GET https://openrouter.ai/api/v1/models` through `app/api/models/route.ts`.
+- Setup: add, validate, save, or remove the local OpenRouter API key. Validation calls `POST /api/key/status`, which forwards the key to `https://openrouter.ai/api/v1/key`.
+- Model: search current OpenRouter models, pick OpenRouter router shortcuts, choose suffix variants, type a custom model id, and edit the system prompt and temperature. Model search is powered by `GET https://openrouter.ai/api/v1/models` through `app/api/models/route.ts`, cached in memory for 60 seconds, and capped to 40 returned models.
+- Model also includes reasoning controls and provider routing. Reasoning supports effort levels from `xhigh` through `none`, optional reasoning exclusion, provider sort (`default`, `price`, `throughput`, `latency`), and a data-collection deny filter.
 - Tools: enable OpenRouter Web Search, Web Fetch, Datetime, Multimodal image/PDF options, Auto compression, and Response caching. Web Search and Web Fetch are off by default and may add tool/provider costs.
-- Data: clear only the active chat thread or reset settings. Both destructive actions require confirmation.
+- Data: export all threads as JSON, export the current thread as Markdown, import previously exported JSON threads, clear only the active chat thread, or reset settings. Destructive clear/reset actions require confirmation.
 
 ## Message Transforms
 
@@ -32,19 +33,23 @@ Auto compression is on by default. The chat route sends OpenRouter's `context-co
 
 Turn Auto compression off in Settings if exact recall of the full transcript matters more than avoiding context-limit errors. When disabled, the route explicitly sends `context-compression` with `enabled: false`.
 
+JSON mode is available from the composer braces button. It requests `response_format: { type: "json_object" }` and adds OpenRouter's `response-healing` plugin for that request.
+
+For long system prompts, the chat route also adds ephemeral cache control automatically on Anthropic, Google, Qwen, and Alibaba model prefixes when the system prompt is at least 4096 characters.
+
 ## Response Caching
 
 Response caching is off by default. When enabled in Settings, the chat route sends `X-OpenRouter-Cache: true` and `X-OpenRouter-Cache-TTL` with each OpenRouter request. TTL is clamped from 1 second to 86400 seconds; the default is 300 seconds.
 
-OpenRouter cache hits replay identical successful responses with no billing, but cached response data is temporarily retained by OpenRouter for the TTL and scoped to your API key. Leave this off for private, sensitive, or one-off prompts.
+When disabled, the chat route sends `X-OpenRouter-Cache: false`. Leave caching off for private, sensitive, or one-off prompts.
 
 ## Multimodal
 
 - Image understanding supports PNG, JPEG, WebP, and GIF uploads. Use a vision-capable OpenRouter model.
 - PDF uploads are sent through OpenRouter as file parts. The Settings PDF parser can stay on `auto` or be set to `cloudflare-ai`, `mistral-ocr`, or `native`.
 - Image generation is off by default. Turn it on in Settings, then select a model that supports image output. When enabled, the model picker searches image-output models.
-- Generated images are rendered under the assistant response and can be saved from the message.
-- Attachments are stored in local chat history as data URLs. v1 limits uploads to 4 files per message and 5 MB per file to reduce localStorage pressure.
+- Generated files are rendered under the assistant response. Generated images can be saved from the message.
+- Attachments are stored in local chat history as data URLs. Uploads are limited to 4 files per message and 5 MB per file to reduce localStorage pressure.
 
 ## Web Tools
 
@@ -56,9 +61,19 @@ The Web tools section in Settings controls OpenRouter server tools:
 
 Advanced options let you choose engines, limits, domain filters, and timezone. When OpenRouter returns URL source metadata, the app shows source chips under assistant replies.
 
+The model picker also supports OpenRouter suffix variants: `:free`, `:extended`, `:thinking`, `:nitro`, `:floor`, `:exacto`, and `:online`. `:online` is a lighter model-id suffix alternative to enabling the full Web Search server tool.
+
 ## Chat History
 
-Chats are stored locally in `localStorage` as separate threads. Use the sidebar to create, select, rename, and delete past chats. Existing v1 single-chat history is migrated into one thread on first launch.
+Chats are stored locally in `localStorage` as separate threads. Use the sidebar to create, select, search, star, rename, and delete past chats. Existing single-chat history is migrated into one thread on first launch.
+
+The first completed exchange in a new chat can be auto-titled through `POST /api/title`. Users can also rename the active chat from the header. Message actions support copy, read aloud, thumbs up/down feedback, user-message editing, assistant-message retry, and forking a new thread from any message.
+
+Assistant responses stream as newline-delimited JSON from `POST /api/chat`. The client batches visible token updates through `requestAnimationFrame`, tracks reasoning deltas separately, stores returned URL sources and generated files, and displays token usage when OpenRouter returns usage metadata.
+
+## Markdown Rendering
+
+Assistant markdown uses `react-markdown` with GitHub-flavored Markdown and `rehype-sanitize`. Code blocks are highlighted with Shiki. `mermaid` blocks render with Mermaid strict mode, and `chart`, `vega-lite`, or `vegalite` blocks render as Vega-Lite charts when the spec uses inline data.
 
 ## iPhone Home Screen Install
 
@@ -73,7 +88,7 @@ The app uses `app/manifest.ts`, standalone display mode, iOS touch icon metadata
 
 - iOS Safari does not provide an automatic install prompt like Chromium browsers.
 - Test installation on a real iPhone or iOS Simulator because Safari does not expose the same manifest debugging UI as Chromium.
-- v1 does not include a custom service worker cache. Chat history and settings are local, but model search and model responses require network access.
+- The app does not include a custom service worker cache. Chat history and settings are local, but model search and model responses require network access.
 - The local API key and chat history are stored in `localStorage`. This is convenient for a personal PWA, but JavaScript on the same origin can read it, and Safari/iOS may clear it.
 
 ## Icons

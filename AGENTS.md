@@ -9,5 +9,7 @@
 - Normal chat requests use the OpenRouter API key saved in Settings/localStorage and forwarded through local Next.js routes—not `OPENROUTER_API_KEY` from env.
 - Client persistence lives in localStorage via `lib/storage.ts` (threads, settings, active thread, sidebar collapse).
 - Shared validation and normalization live in `lib/validation.ts`; shared helpers such as `createId` and `formatBytes` live in `lib/utils.ts`.
+- Settings include OpenRouter router shortcuts, model suffix variants, reasoning controls, provider routing, response handling, multimodal options, and JSON/Markdown import/export in addition to API key setup.
 - Chat streaming uses NDJSON over POST `/api/chat`; the client buffers tokens in a streaming draft flushed via `requestAnimationFrame` to limit re-renders.
+- Chat actions include auto-title generation through `/api/title`, user-message edit, assistant retry, message/thread fork, read aloud, copy, local feedback toggles, source chips, generated file display, and usage summaries.
 - Assistant markdown rendering (Shiki, Mermaid strict mode, Vega-Lite, rehype-sanitize) is centralized in `components/MarkdownMessage.tsx`.
