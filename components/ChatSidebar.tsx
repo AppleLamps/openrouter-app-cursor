@@ -111,7 +111,7 @@ export function ChatSidebar({
             onClick={() => onComingSoon("Home")}
             className="inline-flex min-w-0 items-center rounded-md px-1 py-1 text-left"
           >
-            {!collapsed ? <span className="truncate font-serif text-[1.35rem] font-semibold text-(--foreground)">OpenRouter</span> : null}
+            {!collapsed ? <span className="truncate font-serif text-[1.6rem] leading-none text-(--foreground)">OpenRouter</span> : null}
           </button>
           <div className="ml-auto flex items-center gap-1">
             <button
@@ -422,7 +422,7 @@ function ThreadRow({
         </div>
       ) : (
         <button type="button" onClick={onSelect} className="flex h-8 w-full items-center gap-2 px-2 pr-8 text-left">
-          <span className="min-w-0 flex-1 truncate text-[0.8125rem] leading-5 text-(--foreground)">{thread.title}</span>
+          <span className="min-w-0 flex-1 truncate text-sm leading-5 text-(--foreground)">{thread.title}</span>
           {matchInMessages ? (
             <span className="shrink-0 text-(--muted)" title="Match in messages" aria-label="Match in messages">
               <MessageCircle size={13} aria-hidden="true" />

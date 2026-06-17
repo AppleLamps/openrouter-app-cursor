@@ -234,7 +234,7 @@ export function Composer({
                 submit();
               }
             }}
-            className="block max-h-40 min-h-10 w-full resize-none bg-transparent text-base leading-6 text-(--foreground) outline-none placeholder:text-(--muted) disabled:opacity-60"
+            className="block max-h-40 min-h-6 w-full resize-none bg-transparent text-base leading-6 text-(--foreground) outline-none placeholder:text-(--muted) disabled:opacity-60"
           />
         </label>
 
@@ -423,10 +423,7 @@ export function Composer({
                 title="Send"
                 aria-label="Send"
                 disabled={disabled || (!value.trim() && attachments.length === 0)}
-                className={`grid h-9 w-9 place-items-center rounded-full bg-(--foreground) text-(--background) transition-all duration-150 active:scale-95 ${value.trim() || attachments.length > 0
-                  ? "scale-100 opacity-100"
-                  : "pointer-events-none scale-75 opacity-0"
-                  }`}
+                className="grid h-9 w-9 place-items-center rounded-full bg-(--foreground) text-(--background) transition active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
               >
                 <Send size={16} aria-hidden="true" />
               </button>

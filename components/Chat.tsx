@@ -1027,7 +1027,7 @@ export function Chat() {
             <button
               type="button"
               onClick={renameActiveThread}
-              className="min-w-0 truncate rounded-md px-2 py-1 text-left text-[0.92rem] font-semibold text-(--foreground) hover:bg-(--surface-muted)"
+              className="min-w-0 truncate rounded-md px-2 py-1 text-left text-sm font-semibold text-(--foreground) hover:bg-(--surface-muted)"
             >
               {activeThread?.title || "New chat"}
             </button>
